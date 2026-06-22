@@ -20,6 +20,6 @@
   "workspaces": [
     "apps/*",
     "packages/*",
-    "backend"
+    "apps/backend"
   ]
 }
