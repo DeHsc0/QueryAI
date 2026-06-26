@@ -1,6 +1,9 @@
 from cryptography.fernet import Fernet
 import os , json
 from schemas import Database_Creation
+from dotenv import load_dotenv
+
+load_dotenv() 
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 
