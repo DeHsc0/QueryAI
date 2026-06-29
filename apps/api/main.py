@@ -10,12 +10,15 @@ import os
 from db.init import SessionLocal , User
 import json 
 from svix import Webhook
+from dotenv import load_dotenv
+
+load_dotenv() 
 
 app = FastAPI()
 
 auth = HTTPBearer()
 
-clerk = Clerk(bearer_auth=os.getenv(""))
+clerk = Clerk(bearer_auth=os.getenv("CLERK_SECRET_KEY"))
 
 WEBHOOK_SECRET = os.getenv("CLERK_WEBHOOK_SECRET")
 

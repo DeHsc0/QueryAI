@@ -10,9 +10,6 @@
         "typescript": "5.9.2",
       },
     },
-    "apps/backend": {
-      "name": "@repo/backend",
-    },
     "apps/web": {
       "name": "web",
       "version": "0.1.0",

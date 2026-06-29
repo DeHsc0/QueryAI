@@ -17,7 +17,7 @@ coverage
 
 # Turbo
 .turbo
-
+__pycache__
 # Vercel
 .vercel
 
