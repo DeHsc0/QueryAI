@@ -5,22 +5,40 @@ from sqlalchemy import select , update
 from clerk_backend_api import Clerk
 from schemas import Database_Creation
 from lib.utils import encrypt_credentials , decrypt_credentials
+from fastapi.middleware.cors import CORSMiddleware
 from db.dependency import get_db
 import os
-from db.init import SessionLocal , User
-import json 
+from db.init import User
+import httpx
 from svix import Webhook
+from clerk_backend_api.security.types import AuthenticateRequestOptions
 from dotenv import load_dotenv
 
 load_dotenv() 
 
 app = FastAPI()
 
-auth = HTTPBearer()
+origins=[
+
+        "http://localhost:3000",
+    
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+auth_token = HTTPBearer()
 
 clerk = Clerk(bearer_auth=os.getenv("CLERK_SECRET_KEY"))
 
 WEBHOOK_SECRET = os.getenv("CLERK_WEBHOOK_SECRET")
+
+
 
 @app.post("/api/auth/webhook")
 async def auth (req : Request):
@@ -51,11 +69,12 @@ async def auth (req : Request):
     
     username = event_data.get("username")
 
+    session = get_db()
+    
     user = session.execute(
         select(User).where(User.clerk_id == clerk_id)
     ).scalar_one_or_none()
 
-    session = get_db()
     
     if event_type == "user.created":
 
@@ -131,7 +150,6 @@ async def auth (req : Request):
 
         })
 
-
 @app.get("/test")
 def test(): 
     
@@ -142,18 +160,31 @@ def test():
 
 
 @app.post("/connect_database")
-def connect_database( data : Database_Creation , creds = Depends(auth) ) :
+def connect_database(req : Request ,  data : Database_Creation , creds=Depends(auth_token)) :
 
+    http_req = httpx.Request(
+        method=req.method,
+        url=str(req.url),
+        headers=req.headers
+    )
 
+    req_state = clerk.authenticate_request(
+        
+        http_req,
+        AuthenticateRequestOptions(
+            authorized_parties=origins
+        )
+
+    )
+
+    print(req)
     
     encrypt_data = encrypt_credentials(data)    
     
-    decrypted_data = decrypt_credentials(encrypt_data)
-    
     return JSONResponse(content={
     
-        "encrypted_creds" : encrypt_data ,
-        "decrypted_data" : decrypted_data.decode()
+        "encrypted_creds" : encrypt_data
+
     
     } , status_code=200)
 

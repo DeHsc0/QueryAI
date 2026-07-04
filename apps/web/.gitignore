@@ -8,6 +8,10 @@
 
 /.venv
 
+# Python 
+__pycache__/
+*.py[cod]
+
 # testing
 /coverage
 
