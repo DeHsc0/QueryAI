@@ -38,6 +38,5 @@ Base.metadata.create_all(engine)
 
 SessionLocal  = sessionmaker(
     bind=engine,
-    autoflush=False,
-    autocommit=False
+    autoflush=False
 )

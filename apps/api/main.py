@@ -1,18 +1,19 @@
 from fastapi import FastAPI , Request , HTTPException , Depends
 from fastapi.security import HTTPBearer
 from fastapi.responses import JSONResponse
-from sqlalchemy import select , update
+from sqlalchemy import select , update 
 from clerk_backend_api import Clerk
 from schemas import Database_Creation
 from lib.utils import encrypt_credentials , decrypt_credentials
 from fastapi.middleware.cors import CORSMiddleware
 from db.dependency import get_db
 import os
-from db.init import User
+from db.init import User , UserDatabases
 import httpx
 from svix import Webhook
 from clerk_backend_api.security.types import AuthenticateRequestOptions
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
 
 load_dotenv() 
 
@@ -39,9 +40,8 @@ clerk = Clerk(bearer_auth=os.getenv("CLERK_SECRET_KEY"))
 WEBHOOK_SECRET = os.getenv("CLERK_WEBHOOK_SECRET")
 
 
-
 @app.post("/api/auth/webhook")
-async def auth (req : Request):
+async def auth (req : Request , session : Session = Depends(get_db)):
     
     payload = await req.body()
 
@@ -64,16 +64,13 @@ async def auth (req : Request):
     print("Event_type : " , event_type)
 
     clerk_id = event_data["id"]
-    
-    email_address = event_data["email_addresses"][0]["email_address"]
+
+    email_addresses = event_data.get("email_addresses") or []
+    email_address = email_addresses[0]["email_address"] if email_addresses else None 
     
     username = event_data.get("username")
-
-    session = get_db()
     
-    user = session.execute(
-        select(User).where(User.clerk_id == clerk_id)
-    ).scalar_one_or_none()
+    user = session.query(User).filter( User.clerk_id == clerk_id).first()
 
     
     if event_type == "user.created":
@@ -94,8 +91,10 @@ async def auth (req : Request):
 
             })
 
-        user = User( username=username , email=email_address , clerk_id=clerk_id)
-        session.add(user)
+        create_user = User( username=username , email=email_address , clerk_id=clerk_id)
+        
+        session.add(create_user)
+        session.commit()
 
         return JSONResponse(
             content={
@@ -118,6 +117,7 @@ async def auth (req : Request):
  
             
         session.delete(user)
+        session.commit()
 
         return JSONResponse(content={
 
@@ -136,12 +136,20 @@ async def auth (req : Request):
                 "message" : "User dosent Exists"
 
             }) 
+        
+        user.username = username 
+        user.email = email_address 
+
+        session.commit()
+
+        session.refresh(user)
             
-        result = session.execute(
-            update(User)
-            .where( User.clerk_id == clerk_id )
-            .values( username , email=email_address )
-        )
+        # result = session.execute(
+        #     update(User)
+        #     .where( User.clerk_id == clerk_id )
+        #     .values( username , email=email_address )
+        # )
+
 
         return JSONResponse(content={
 
@@ -150,17 +158,9 @@ async def auth (req : Request):
 
         })
 
-@app.get("/test")
-def test(): 
     
-    return JSONResponse(content={
-        "hello" : True
-    } , status_code=200)
-
-
-
 @app.post("/connect_database")
-def connect_database(req : Request ,  data : Database_Creation , creds=Depends(auth_token)) :
+async def connect_database(req : Request ,  data : Database_Creation , creds=Depends(auth_token) , session=Depends(get_db)) :
 
     http_req = httpx.Request(
         method=req.method,
@@ -177,15 +177,29 @@ def connect_database(req : Request ,  data : Database_Creation , creds=Depends(a
 
     )
 
-    print(req)
+    user_id = req_state.payload.get("sub") 
+
+    if not req_state.is_authenticated == False or not req_state.is_signed_in or not user_id: 
+        return JSONResponse( content={
+
+            "message" : "User is not authenticated"
+
+        } , status_code=401)
     
     encrypt_data = encrypt_credentials(data)    
+
+    database =  UserDatabases(
+        user_clerk_id=user_id,
+        encrypted_creds=encrypt_data
+    )
+
+    session.add(database)
+
+    session.commit()
     
     return JSONResponse(content={
     
-        "encrypted_creds" : encrypt_data
-
+        "message" : "Successfully created Database"
     
     } , status_code=200)
-
 
