@@ -1,37 +1,15 @@
-from fastapi import FastAPI , Request , HTTPException , Depends
+from fastapi import Request 
+from fastapi import Request , HTTPException , Depends
 from fastapi.security import HTTPBearer
 from fastapi.responses import JSONResponse
-from sqlalchemy import select , update 
 from clerk_backend_api import Clerk
-from schemas import Database_Creation
-from lib.utils import encrypt_credentials , decrypt_credentials
-from fastapi.middleware.cors import CORSMiddleware
 from db.dependency import get_db
 import os
-from db.init import User , UserDatabases
-import httpx
+from db.init import User 
 from svix import Webhook
-from clerk_backend_api.security.types import AuthenticateRequestOptions
-from dotenv import load_dotenv
+from sqlalchemy.sql import update
 from sqlalchemy.orm import Session
-
-load_dotenv() 
-
-app = FastAPI()
-
-origins=[
-
-        "http://localhost:3000",
-    
-    ]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
+from fastapi import APIRouter
 
 auth_token = HTTPBearer()
 
@@ -39,8 +17,9 @@ clerk = Clerk(bearer_auth=os.getenv("CLERK_SECRET_KEY"))
 
 WEBHOOK_SECRET = os.getenv("CLERK_WEBHOOK_SECRET")
 
+router = APIRouter() 
 
-@app.post("/api/auth/webhook")
+@router.post("/webhook")
 async def auth (req : Request , session : Session = Depends(get_db)):
     
     payload = await req.body()
@@ -144,11 +123,11 @@ async def auth (req : Request , session : Session = Depends(get_db)):
 
         session.refresh(user)
             
-        # result = session.execute(
-        #     update(User)
-        #     .where( User.clerk_id == clerk_id )
-        #     .values( username , email=email_address )
-        # )
+        result = session.execute(
+            update(User)
+            .where( User.clerk_id == clerk_id )
+            .values( username , email=email_address )
+        )
 
 
         return JSONResponse(content={
@@ -157,49 +136,3 @@ async def auth (req : Request , session : Session = Depends(get_db)):
             "message" : "Successfully updated user details"
 
         })
-
-    
-@app.post("/connect_database")
-async def connect_database(req : Request ,  data : Database_Creation , creds=Depends(auth_token) , session=Depends(get_db)) :
-
-    http_req = httpx.Request(
-        method=req.method,
-        url=str(req.url),
-        headers=req.headers
-    )
-
-    req_state = clerk.authenticate_request(
-        
-        http_req,
-        AuthenticateRequestOptions(
-            authorized_parties=origins
-        )
-
-    )
-
-    user_id = req_state.payload.get("sub") 
-
-    if not req_state.is_authenticated == False or not req_state.is_signed_in or not user_id: 
-        return JSONResponse( content={
-
-            "message" : "User is not authenticated"
-
-        } , status_code=401)
-    
-    encrypt_data = encrypt_credentials(data)    
-
-    database =  UserDatabases(
-        user_clerk_id=user_id,
-        encrypted_creds=encrypt_data
-    )
-
-    session.add(database)
-
-    session.commit()
-    
-    return JSONResponse(content={
-    
-        "message" : "Successfully created Database"
-    
-    } , status_code=200)
-
