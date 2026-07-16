@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from clerk_backend_api import Clerk
 from db.dependency import get_db
 import os
-from db.init import User 
+from apps.backend.db.models import User 
 from svix import Webhook
 from sqlalchemy.sql import update
 from sqlalchemy.orm import Session

@@ -1,5 +1,5 @@
 
-from db.init import SessionLocal
+from apps.backend.db.models import SessionLocal
 
 def get_db():
     db = SessionLocal()

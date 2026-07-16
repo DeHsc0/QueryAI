@@ -11,12 +11,18 @@ export default function Dashboard () {
 
             const response = await axios.post("http://localhost:8000/api/database" , {
 
-            
-                host : "localhost",
-                user : "root",
-                password : "password",
-                port : 3306,
-                database: "my_database"
+                database_name : "sadasdasd",
+                description  : "adsadasdasd",
+                creds : {
+                    
+                    database_type  : "mysql",
+                    host : "asdasdadsasd",
+                    user : "asdasdsa",
+                    password : "asdasdasdasd" ,
+                    database : "asdasdasdasda",
+                    port : 12331
+
+                }
 
             } , { withCredentials : true })
 

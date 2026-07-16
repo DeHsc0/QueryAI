@@ -1,6 +1,6 @@
 from cryptography.fernet import Fernet
 import os , json
-from schemas import Database_Creation
+from schemas import Creds
 from dotenv import load_dotenv
 
 load_dotenv() 
@@ -12,7 +12,7 @@ if ENCRYPTION_KEY is None:
 
 fernet = Fernet(ENCRYPTION_KEY)
 
-def encrypt_credentials ( credentials_dict : Database_Creation ): 
+def encrypt_credentials ( credentials_dict : Creds ): 
 
     encrypted_creds = fernet.encrypt( json.dumps(credentials_dict.model_dump()).encode() )    
     

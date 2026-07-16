@@ -1,10 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel , ConfigDict
 from enum import Enum
-
-# database.py
 
 class Creds(BaseModel):
     host : str
+    database_type : Database_types  
     user : str 
     password : str
     port : int
@@ -19,5 +18,4 @@ class Database_types(str , Enum):
 class Database_Creation(BaseModel):
     database_name : str
     description : str
-    database_type : Database_types  
-    creds : dict[ str , Creds]
+    creds : Creds
