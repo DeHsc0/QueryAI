@@ -1,8 +1,8 @@
-
-from apps.backend.db.models import SessionLocal
+from db.models import engine
+from sqlmodel import Session
 
 def get_db():
-    db = SessionLocal()
+    db = Session(engine)
     try:
         yield db
         db.commit()

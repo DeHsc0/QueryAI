@@ -5,9 +5,8 @@ from fastapi.responses import JSONResponse
 from clerk_backend_api import Clerk
 from db.dependency import get_db
 import os
-from apps.backend.db.models import User 
+from db.models import User 
 from svix import Webhook
-from sqlalchemy.sql import update
 from sqlalchemy.orm import Session
 from fastapi import APIRouter
 
@@ -122,13 +121,6 @@ async def auth (req : Request , session : Session = Depends(get_db)):
         session.commit()
 
         session.refresh(user)
-            
-        result = session.execute(
-            update(User)
-            .where( User.clerk_id == clerk_id )
-            .values( username , email=email_address )
-        )
-
 
         return JSONResponse(content={
 

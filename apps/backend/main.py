@@ -25,9 +25,11 @@ origins=[
 class ClerkAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch ( self , req : Request , call_next  ): 
 
-        public_paths = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/webhooks"}
+        public_paths = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/auth/webhook"}
+
+        print(req.url.path)
         
-        if req.url.path in public_paths or req.url.path.startswith("/webhooks"):
+        if req.url.path in public_paths:
         
             return await call_next(req)        
 
@@ -49,8 +51,6 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
                 )
 
             )
-
-            print("cookies :" , req.cookies)
 
             print("IS Signed in :" , req_state.is_signed_in)
 

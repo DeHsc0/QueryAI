@@ -9,18 +9,19 @@ export default function Dashboard () {
 
         const fetchResults = async () => {
 
+            // sample DB 
+
             const response = await axios.post("http://localhost:8000/api/database" , {
 
                 database_name : "sadasdasd",
                 description  : "adsadasdasd",
                 creds : {
-                    
-                    database_type  : "mysql",
-                    host : "asdasdadsasd",
-                    user : "asdasdsa",
-                    password : "asdasdasdasd" ,
-                    database : "asdasdasdasda",
-                    port : 12331
+                    database_type : "postgresql",
+                    username      : "postgres",
+                    password      : "123456",
+                    host          : "localhost",
+                    database      : "pagila",
+                    port          : 5432
 
                 }
 

@@ -1,21 +1,23 @@
-from pydantic import BaseModel , ConfigDict
-from enum import Enum
+from pydantic import BaseModel , ConfigDict , Field
+from typing import Literal
 
 class Creds(BaseModel):
     host : str
-    database_type : Database_types  
-    user : str 
+    database_type : Literal[ "oracle" , "postgresql" , "mysql" , "microsoft" ]  
+    username : str 
     password : str
     port : int
     database : str
 
-class Database_types(str , Enum):
-    MYSQL = "mysql"
-    POSTGRESQL = "postgresql"
-    ORACLE = "oracle"
-    MICROSOFT = "microsoft"
+    model_config={
+
+        "from_attributes" : True
+
+    }
 
 class Database_Creation(BaseModel):
-    database_name : str
+    database_name : str = Field(
+        pattern=r"^[a-z0-9]+$"
+    )
     description : str
     creds : Creds
