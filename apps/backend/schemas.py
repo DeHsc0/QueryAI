@@ -21,3 +21,8 @@ class Database_Creation(BaseModel):
     )
     description : str
     creds : Creds
+
+class Chat(BaseModel): 
+    query : str
+    thread_id : str
+    db_id : str

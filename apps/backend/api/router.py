@@ -1,5 +1,5 @@
 from fastapi import APIRouter 
-from .endpoints import auth , database
+from .endpoints import auth , database , chat
 
 api_router = APIRouter()
 
@@ -16,5 +16,14 @@ api_router.include_router(
     database.router,
     prefix="/database",
     tags=["Auth"]
+
+)
+
+api_router.include_router(
+
+    chat.router,
+    prefix="/chat",
+    # tags=["Auth"]
+    
 
 )

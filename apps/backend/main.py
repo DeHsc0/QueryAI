@@ -1,18 +1,48 @@
-from fastapi import FastAPI , Request , HTTPException , Depends
+from fastapi import FastAPI , Request 
 from fastapi.security import HTTPBearer
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
 from api.router import api_router
-from clerk_backend_api import Clerk , AuthenticateRequestOptions
+from clerk_backend_api import  AuthenticateRequestOptions
 import httpx
 import os 
-from clerk_backend_api import authenticate_request , authenticate_request_async
+from clerk_backend_api import authenticate_request
+from dataclasses import dataclass
+from contextlib import asynccontextmanager
+from agent.init import get_agent
+from langchain.agents.middleware.types import (
+    AgentState,
+    InputAgentState,
+    OutputAgentState,
+)
+from langgraph.graph.state import CompiledStateGraph
+from typing import Any 
+from agent.init import Context
 
 load_dotenv() 
 
-app = FastAPI()
+@dataclass
+class AppState: 
+     agent : CompiledStateGraph[AgentState[Any], Context, InputAgentState, OutputAgentState[Any]]
+
+@asynccontextmanager 
+async def lifespan (app : FastAPI): 
+
+    agent = get_agent()
+
+    state = AppState(
+
+        agent=agent
+        
+    ) 
+
+    app.state.state = state
+
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 auth_token = HTTPBearer() 
 
