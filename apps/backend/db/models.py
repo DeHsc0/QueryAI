@@ -26,6 +26,24 @@ class UserDatabases( SQLModel , table=True ):
     database_name : str = Field( unique=True) 
     description : str = Field()
     user : Optional["User"] = Relationship( back_populates="databases")
+    conversations : List["Conversations"] = Relationship( back_populates="user_database" )
+
+class Conversations( SQLModel , table=True):
+    __tablename__ = "conversations"
+
+    id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True)
+    database_id : uuid.UUID = Field( foreign_key="user_databases.id")
+    turns : List[Turns] = Relationship( back_populates="conversations")
+
+class Turns ( SQLModel , table=True ):
+    __tablename__ = "turns" 
+
+    id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True)
+    conversation_id : uuid.UUID = Field( foreign_key="conversations.id")
+    user_query : str 
+    ai_response : str 
+
+
 
 engine = create_engine(
 

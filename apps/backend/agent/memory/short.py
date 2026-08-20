@@ -1,7 +1,7 @@
 from langgraph.checkpoint.redis import RedisSaver
 import os 
 
-def get_checkpointer() :
+def get_checkpointer() -> RedisSaver :
 
     REDIS_URL=os.getenv("REDIS_URL") 
     

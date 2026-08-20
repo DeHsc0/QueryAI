@@ -12,33 +12,27 @@ from clerk_backend_api import authenticate_request
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
 from agent.init import get_agent
-from langchain.agents.middleware.types import (
-    AgentState,
-    InputAgentState,
-    OutputAgentState,
-)
-from langgraph.graph.state import CompiledStateGraph
-from typing import Any 
-from agent.init import Context
+from app_state import AppState
+from agent.memory.short import get_checkpointer
 
 load_dotenv() 
 
-@dataclass
-class AppState: 
-     agent : CompiledStateGraph[AgentState[Any], Context, InputAgentState, OutputAgentState[Any]]
 
 @asynccontextmanager 
 async def lifespan (app : FastAPI): 
 
-    agent = get_agent()
+    checkpointer = get_checkpointer()
+
+    agent = get_agent( checkpointer )
 
     state = AppState(
 
-        agent=agent
+        agent=agent, 
+        checkpointer=checkpointer
         
     ) 
 
-    app.state.state = state
+    app.state = state
 
     yield
 
@@ -55,7 +49,7 @@ origins=[
 class ClerkAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch ( self , req : Request , call_next  ): 
 
-        public_paths = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/auth/webhook"}
+        public_paths = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/auth/webhook" }
 
         print(req.url.path)
         

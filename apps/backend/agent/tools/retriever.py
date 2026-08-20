@@ -7,6 +7,8 @@ from qdrant_client import models
 @tool(args_schema=Retrieve_Context) 
 def retrieve_context ( query : str ,  runtime : ToolRuntime ): 
 
+    """Retrieve context from the vector db"""
+
     tenant_id = runtime.context.tenant_id
 
     collection_name = os.getenv("QDRANT_COLLECTION")

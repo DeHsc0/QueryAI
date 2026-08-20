@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from sqlmodel import create_engine , inspect
 from schemas import Creds
 from typing import Dict
-from config import get_qdrant_client
+from lib.config import get_qdrant_client
 from qdrant_client import models 
 from uuid import uuid4
 from langchain_core.documents import Document 

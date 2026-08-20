@@ -1,10 +1,8 @@
 from qdrant_client import QdrantClient , models  
 from langchain_qdrant import QdrantVectorStore
 import os 
-from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_qdrant import FastEmbedSparse , RetrievalMode
 from dotenv import load_dotenv
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 load_dotenv()
 
@@ -13,8 +11,6 @@ def get_qdrant_client () -> QdrantClient :
     qdrant_url = os.getenv("QDRANT_URL")
     qdrant_api_key = os.getenv("QDRANT_API_KEY")
     collection_name = os.getenv("QDRANT_COLLECTION")
-
-    # sparse_model = HuggingFaceEndpointEmbeddings( model="Qdrant/bm25" )
 
     client = QdrantClient(
         url=qdrant_url,

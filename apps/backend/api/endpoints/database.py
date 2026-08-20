@@ -7,7 +7,7 @@ from lib.helpers import encrypt_credentials , decrypt_credentials , store_schema
 from db.dependency import get_db
 from db.models import UserDatabases
 import json
-from config import get_qdrant_client
+from lib.config import get_qdrant_client
 from sqlmodel import Session, select
 
 router = APIRouter() 

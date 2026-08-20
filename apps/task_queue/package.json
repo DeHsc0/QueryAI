@@ -1,0 +1,10 @@
+{
+  "name": "@repo/task_queue",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "uv run celery -A app.main:app worker --loglevel=info",
+    "build": "uv sync --frozen",
+    "start": "uv run celery -A app.main:app worker --loglevel=info"
+  }
+}
