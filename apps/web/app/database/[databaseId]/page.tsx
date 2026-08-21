@@ -37,7 +37,16 @@ export default function Database ({ params } : { params : { databaseId : string 
 
     async function getCon () {
 
-        const result = await axios.get("http://localhost:8000/api/conversation?id=its-working-i-guess"  , { withCredentials : true })
+        const result = await axios.get(
+            "http://localhost:8000/api/conversation",
+            {
+            params: {
+                id: "its-working-i-guess",
+                thread_id: "11ccc471-6403-4229-bf82-d73ede25e4b6",
+            },
+            withCredentials: true,
+            }
+        );
 
     }
 

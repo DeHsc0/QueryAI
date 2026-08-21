@@ -9,7 +9,6 @@ from clerk_backend_api import  AuthenticateRequestOptions
 import httpx
 import os 
 from clerk_backend_api import authenticate_request
-from dataclasses import dataclass
 from contextlib import asynccontextmanager
 from agent.init import get_agent
 from app_state import AppState

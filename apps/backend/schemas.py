@@ -26,3 +26,7 @@ class Chat(BaseModel):
     query : str
     thread_id : str
     db_id : str
+
+class ChatCreation(BaseModel):
+    database_id : str
+    query : str

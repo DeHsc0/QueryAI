@@ -17,14 +17,20 @@ from langgraph.checkpoint.redis import RedisSaver
 class Context: 
     tenant_id : str
 
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+
+def get_llm () -> ChatOpenAI :
+
+    model = ChatOpenAI( model="deepseek-v4-pro" , api_key=DEEPSEEK_API_KEY , base_url="https://api.deepseek.com")
+
+    return model
 
 def get_agent( checkpointer : RedisSaver) -> CompiledStateGraph[AgentState[Any], Context, InputAgentState, OutputAgentState[Any]] : 
 
-    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
     checkpointer = get_checkpointer()
 
-    model = ChatOpenAI( model="deepseek-v4-pro" , api_key=DEEPSEEK_API_KEY , base_url="https://api.deepseek.com")
+    model = get_llm()
 
     agent = create_agent(
 
