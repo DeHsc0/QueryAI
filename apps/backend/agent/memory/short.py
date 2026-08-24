@@ -14,4 +14,4 @@ def get_checkpointer() -> RedisSaver :
 
     checkpointer.setup()
 
-    return checkpointer    
+    return checkpointer

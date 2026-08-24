@@ -1,5 +1,5 @@
 from pydantic import BaseModel , ConfigDict , Field
-from typing import Literal
+from typing import Literal , Optional
 
 class Creds(BaseModel):
     host : str
@@ -24,9 +24,9 @@ class Database_Creation(BaseModel):
 
 class Chat(BaseModel): 
     query : str
-    thread_id : str
+    conversation_id : str
     db_id : str
 
 class ChatCreation(BaseModel):
     database_id : str
-    query : str
+    query : Optional[str]

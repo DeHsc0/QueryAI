@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter , Request
 from typing import Optional
 from fastapi.responses import JSONResponse
@@ -8,11 +9,22 @@ from app.tasks import insert_chats_in_db
 from app_state import AppState
 from schemas import ChatCreation
 from agent.init import get_llm
-from langchain_core.messages import SystemMessage , HumanMessage
+from langchain_core.messages import SystemMessage , HumanMessage , AIMessage , ToolMessage
 from db.models import Conversations
 from uuid import uuid4
+from typing import Any , List
+from dataclasses import dataclass
+from sqlmodel import select
+from db.models import Turns
 
 router = APIRouter()
+
+@dataclass
+class Chat_Turns:
+    user_query : str
+    ai_response : str
+    timestamp : str
+
 
 @router.get("/")
 def get_conversations (req : Request, id : Optional[str] = None , thread_id : Optional[str]  = None,  session : Session =Depends(get_db)) :
@@ -30,26 +42,62 @@ def get_conversations (req : Request, id : Optional[str] = None , thread_id : Op
 
     checkpointer = state.checkpointer
 
-    config = {
+    config = {"configurable": { "thread_id": thread_id }}
 
-            "configurable" : {
+    t = checkpointer.get_tuple(config) 
 
-                "thread_id" : f"{thread_id}"
+    turns = []
 
-            }
+    if t:
+        messages = t.checkpoint.get("channel_values", {}).get("messages", [])
+        
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
 
-        }
+            if isinstance( msg , HumanMessage): 
+                turn = {
 
-    for t in checkpointer.list(config):
-        print(t.checkpoint["id"], t.metadata)
+                    "user_query" : msg.content, 
+                    "ai_response" : None
 
-    task = insert_chats_in_db.delay(message="Hello world")
+                }             
 
-    return JSONResponse( content={
+            i += 1
 
-        "message" : "Success"
+            if i < len(messages):
 
-    } , status_code=200)
+                msg = messages[i]
+
+                if isinstance(msg , AIMessage): 
+
+                    turn["ai_response"] = msg.content
+                    i += 1
+
+            turns.append(turn)
+
+        print(turns)
+
+    elif len(turns) > 0:
+
+        return JSONResponse( content={
+
+            "Data" : turns
+
+        } , status_code=200)
+
+    else: 
+
+        conversations = session.exec(
+
+            select(Turns).join(Conversations).where(
+
+                Conversations.database_id == id, 
+                Conversations.id == thread_id 
+
+            )
+
+        )
 
 
 @router.post("/")
@@ -117,11 +165,8 @@ def create_conversation( req : Request , data : ChatCreation , session : Session
 
     } )
 
-    print(title)
-
     conversation = Conversations(
-
-        thread_id=str(uuid4()),
+        
         database_id=database_id,
         title=title.content
 
@@ -135,7 +180,7 @@ def create_conversation( req : Request , data : ChatCreation , session : Session
 
     return JSONResponse(content={
 
-        "thread_id" : conversation.thread_id,
+        "thread_id" : conversation.id,
         "title" : conversation.title
 
     } , status_code=200)

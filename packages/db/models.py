@@ -35,7 +35,6 @@ class Conversations( SQLModel , table=True):
     database_id : uuid.UUID = Field( foreign_key="user_databases.id")
     turns : Optional[List[Turns]] = Relationship( back_populates="conversations")
     title : str = Field()
-    thread_id : str = Field( unique=True )
 
 class Turns ( SQLModel , table=True ):
     __tablename__ = "turns" 

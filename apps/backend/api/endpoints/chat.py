@@ -1,9 +1,11 @@
 from fastapi import APIRouter , Request
 from schemas import Chat
 from fastapi.responses import JSONResponse
+from langchain_core.messages import HumanMessage , AIMessage
 from agent.init import Context
 from app_state import AppState
-import json
+from task_queue.app.tasks import insert_chats_in_db
+from langgraph.stream.run_stream import GraphRunStream
 
 router = APIRouter()
 
@@ -14,32 +16,45 @@ async def chat (req : Request , data : Chat):
 
     user_id : str = req.state.clerk.get("sub")
 
-    print("Thread ID :" , data.thread_id)
-
     agent = state.agent 
 
     tenant_id = f"{user_id}__{data.db_id}"
 
-    result = agent.invoke(
+    config={
 
-        {"messages": [{"role": "user", "content": data.query}]},
+        "configurable" : {
 
-        config={
-
-            "configurable" : {
-
-                "thread_id" : f"{data.thread_id}"
+            "thread_id" : f"{data.conversation_id}"
 
             }
+        }
 
-        }, 
-        context=Context(tenant_id=tenant_id)
+    stream : GraphRunStream = agent.stream_events( 
+
+        {"messages" : [ HumanMessage(content=data.query)]}, 
+
+        config=config,
+
+        context=Context(tenant_id=tenant_id),
+
+        version="v3"
 
     )
 
+    ai_resonse = stream.output
+
+
+        
+        # for chunk in message.tool_calls:
+        #     print(f"tool call chunk: {chunk}")
+
+        # finalized = message.tool_calls.get()
+    
+
+
     return JSONResponse(content={
 
-        "data" : json.dumps( result , default=str)
+        "data" : ""
 
     } , status_code=200)
 
