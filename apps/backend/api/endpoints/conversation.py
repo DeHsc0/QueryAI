@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from db.dependency import get_db
 from fastapi import Depends 
 from sqlmodel import Session
-from app.tasks import insert_chats_in_db
+from task_queue.tasks import insert_chats_in_db
 from app_state import AppState
 from schemas import ChatCreation
 from agent.init import get_llm

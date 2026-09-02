@@ -1,4 +1,4 @@
-from db.models import engine
+from .models import engine
 from sqlmodel import Session
 
 def get_db():

@@ -10,6 +10,7 @@ from lib.config import get_qdrant_client
 from qdrant_client import models 
 from uuid import uuid4
 from langchain_core.documents import Document 
+from typing import List
 
 
 load_dotenv() 
@@ -43,7 +44,7 @@ def decrypt_credentials ( encrypted_creds : str ):
 
 
 
-def store_schema ( creds : Creds , db_id : str , user_id : str ):
+def store_schema ( creds : Creds ):
 
     driver_types : Dict[ str , str ] = {
 
@@ -67,24 +68,34 @@ def store_schema ( creds : Creds , db_id : str , user_id : str ):
 
     engine = create_engine( url=db_url , pool_pre_ping=True)
 
+    db_dense_schema : List[str] = []
 
-    schema : list[str] = []
+    schema : List[str] = []
 
     with engine.connect() as conn: 
         inspector = inspect(conn)
 
         table_names = inspector.get_table_names()
 
+        db_dense_schema.append(f"Number of Tables: {len(table_names)} \n")
 
         for name in table_names:
+
+            lines = [f"Table : {name} \n\nColumns : "]
 
             relationships = []
                 
             cols = inspector.get_columns(name)
+
+            db_dense_schema.append(f"T:{name} | cols:{len(cols)}")
+
             foreign_keys = inspector.get_foreign_keys(name)
 
-
             if foreign_keys.__len__() > 0: 
+
+                last_index_fk = len(foreign_keys) - 1 
+
+                db_dense_schema.append(" | J:")
 
                 for fk in foreign_keys:
 
@@ -92,11 +103,19 @@ def store_schema ( creds : Creds , db_id : str , user_id : str ):
                     referred_table = fk["referred_table"]
                     referred_cols = ", ".join(fk["referred_columns"])
 
+                    if foreign_keys.index(fk) == last_index_fk: 
+
+                        db_dense_schema.append(f" {referred_table} \n")
+
+                    else : 
+
+                        db_dense_schema.append(f" {referred_table} , ")
+
                     relationships.append(
                         f"{name}.{constrained_cols} → {referred_table}.{referred_cols}"
                     )
-
-            lines = [f"Table : {name} \n\nColumns : "]
+            else: 
+                db_dense_schema.append("\n")
 
             for col in cols: 
 
@@ -117,10 +136,17 @@ def store_schema ( creds : Creds , db_id : str , user_id : str ):
 
             schema.append(table_schema)
 
+    db_dense_schema = "".join(db_dense_schema)
+
+    return schema , db_dense_schema
+
+
+def ingest_schema ( schema : List[str] , user_id : str , db_id : str ) :
+
     client = get_qdrant_client()
-
+    
     points = []
-
+    
     for data in schema : 
         
         point = models.PointStruct(
@@ -138,7 +164,7 @@ def store_schema ( creds : Creds , db_id : str , user_id : str ):
                         "openrouter-api-key" : OPENROUTER_API_KEY,
                         "dimensions" : 1024
 
-                  }  
+                    }  
 
                 ),
                 "sparse" : models.Document(
@@ -152,8 +178,8 @@ def store_schema ( creds : Creds , db_id : str , user_id : str ):
 
             payload={
             
-               "tenant_id" : f"{user_id}__{db_id}",
-               "page_content" : data
+                "tenant_id" : f"{user_id}__{db_id}",
+                "page_content" : data
             
             }
 
@@ -168,5 +194,3 @@ def store_schema ( creds : Creds , db_id : str , user_id : str ):
         wait=True
 
     )
-
-    return schema

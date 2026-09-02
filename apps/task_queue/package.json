@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "uv run celery -A app.main:app worker --loglevel=info",
+    "dev": "uv run celery -A task_queue.main:app worker -E --loglevel=info",
     "build": "uv sync --frozen",
-    "start": "uv run celery -A app.main:app worker --loglevel=info"
+    "start": "uv run celery -A task_queue.main:app worker -E --loglevel=info"
   }
 }

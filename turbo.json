@@ -1,6 +1,9 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
-  "ui": "stream",
+  "ui": "tui",
+  "futureFlags": {
+    "experimentalPythonWorkspaces": true
+  },
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

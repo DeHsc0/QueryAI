@@ -1,5 +1,5 @@
 from langchain.tools import tool , ToolRuntime
-from agent.tools.arg_schema import Retrieve_Context
+from agent.tools.tools_arg_schema import Retrieve_Context
 from lib.helpers import get_qdrant_client
 import os
 from qdrant_client import models
@@ -7,7 +7,7 @@ from qdrant_client import models
 @tool(args_schema=Retrieve_Context) 
 def retrieve_context ( query : str ,  runtime : ToolRuntime ): 
 
-    """Retrieve context from the vector db"""
+    """Retrieve context about the user's database schema"""
 
     tenant_id = runtime.context.tenant_id
 

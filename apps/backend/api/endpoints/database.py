@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from fastapi import Request , Depends
 from fastapi.responses import JSONResponse
 from schemas import Database_Creation
-from lib.helpers import encrypt_credentials , decrypt_credentials , store_schema
+from lib.helpers import encrypt_credentials , decrypt_credentials , store_schema , ingest_schema
 from db.dependency import get_db
 from db.models import UserDatabases
 import json
@@ -37,11 +37,14 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
 
     encrypt_data = encrypt_credentials( data.creds )
 
+    schema , db_dense_schema = store_schema( data.creds )
+
     database =  UserDatabases(
         user_clerk_id=user_id,
         encrypted_creds=encrypt_data,
         database_name=data.database_name,
         description=data.description,
+        dense_schema=db_dense_schema
     )
 
     session.add(database)
@@ -50,9 +53,9 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
 
     session.refresh(database)
 
-    db_id=database.id
 
-    schema = store_schema(data.creds  , db_id=db_id , user_id=user_id)
+
+    ingest_schema(schema , user_id=user_id , db_id=database.id)
     
     return JSONResponse(content={
     

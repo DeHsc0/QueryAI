@@ -2,7 +2,7 @@ from langchain.agents import create_agent
 from agent.memory.short import get_checkpointer
 from langchain_openai import ChatOpenAI
 from agent.tools.retriever import retrieve_context
-from agent.tools.test import test_tool
+from agent.tools.run_sql import run_sql
 import os
 from dataclasses import dataclass
 from langgraph.graph.state import CompiledStateGraph
@@ -33,7 +33,7 @@ def get_agent( checkpointer : RedisSaver) -> CompiledStateGraph[AgentState[Any],
     agent = create_agent(
 
         model, 
-        tools=[retrieve_context , test_tool],
+        tools=[retrieve_context , run_sql ],
         checkpointer=checkpointer,
         context_schema=Context,
         system_prompt="Do as user says"

@@ -25,6 +25,7 @@ class UserDatabases( SQLModel , table=True ):
     encrypted_creds : str = Field()
     database_name : str = Field( unique=True) 
     description : str = Field()
+    dense_schema : str = Field()
     user : Optional["User"] = Relationship( back_populates="databases")
     conversations : List["Conversations"] = Relationship( back_populates="user_database" )
 
@@ -33,7 +34,8 @@ class Conversations( SQLModel , table=True):
 
     id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True)
     database_id : uuid.UUID = Field( foreign_key="user_databases.id")
-    turns : Optional[List[Turns]] = Relationship( back_populates="conversations")
+    user_database: UserDatabases = Relationship(back_populates="conversations")
+    turns : Optional[List[Turns]] = Relationship( back_populates="conversation")
     title : str = Field()
 
 class Turns ( SQLModel , table=True ):
@@ -41,6 +43,7 @@ class Turns ( SQLModel , table=True ):
 
     id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True)
     conversation_id : uuid.UUID = Field( foreign_key="conversations.id")
+    conversation : Conversations = Relationship( back_populates="turns")
     user_query : str 
     ai_response : str 
 
