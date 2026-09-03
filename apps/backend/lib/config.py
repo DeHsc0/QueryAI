@@ -3,6 +3,8 @@ from langchain_qdrant import QdrantVectorStore
 import os 
 from langchain_qdrant import FastEmbedSparse , RetrievalMode
 from dotenv import load_dotenv
+from redis import Redis
+
 
 load_dotenv()
 
@@ -56,3 +58,12 @@ def get_qdrant_client () -> QdrantClient :
 
 
     return client
+
+def get_redis_client () -> Redis : 
+
+    redis_client = Redis.from_url(os.getenv("REDIS_URL") , decode_responses=True )
+
+    return redis_client
+
+    
+    

@@ -42,13 +42,13 @@ async def chat (req : Request , data : Chat):
 
     tool_calls : List[Tool_Call] = []
 
-    for chunk in agent.stream( 
+    async for chunk in agent.astream( 
 
         {"messages" : [ HumanMessage(content=data.query)]}, 
 
         config=config,
 
-        context=Context(tenant_id=tenant_id),
+        context=Context(tenant_id=tenant_id , db_type=None , dense_schema=None),
 
         version="v3", 
 
@@ -56,7 +56,6 @@ async def chat (req : Request , data : Chat):
 
     ):
 
-         
         chunk_type , chunk_data = chunk
 
         tool_name = None
@@ -77,13 +76,12 @@ async def chat (req : Request , data : Chat):
             tool_data = chunk_data["tools"]["messages"][0] 
 
             if isinstance(tool_data , ToolMessage) :
-               print(tool_data)
+               
                for calls in tool_calls:
                    if calls.call_id == tool_data.tool_call_id: 
                        calls.output = tool_data.content 
 
-            
-        print(tool_calls)
+        
 
     result = insert_chats_in_db.delay("hello from FastAPI")
 

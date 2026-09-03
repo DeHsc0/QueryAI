@@ -11,7 +11,9 @@ from qdrant_client import models
 from uuid import uuid4
 from langchain_core.documents import Document 
 from typing import List
-
+from sqlmodel import Session , select
+from db.dependency import engine
+from db.models import UserDatabases
 
 load_dotenv() 
 
@@ -194,3 +196,4 @@ def ingest_schema ( schema : List[str] , user_id : str , db_id : str ) :
         wait=True
 
     )
+

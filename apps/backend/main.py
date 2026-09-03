@@ -20,14 +20,14 @@ load_dotenv()
 @asynccontextmanager 
 async def lifespan (app : FastAPI): 
 
-    checkpointer = get_checkpointer()
+    checkpointer = await get_checkpointer()
 
     agent = get_agent( checkpointer )
 
     state = AppState(
 
         agent=agent, 
-        checkpointer=checkpointer
+        checkpointer= checkpointer
         
     ) 
 
