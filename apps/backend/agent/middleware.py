@@ -12,7 +12,6 @@ from lib.config import get_redis_client
 @before_agent
 async def ensure_dense_schema ( state : AgentState , runtime : Runtime[Context] ): 
 
-
     cache_key = f"dense_schema:{runtime.context.tenant_id}"
 
     user_id , db_id = runtime.context.tenant_id.split("__" , 1)
@@ -33,7 +32,7 @@ async def ensure_dense_schema ( state : AgentState , runtime : Runtime[Context] 
 
     with Session(engine) as db: 
 
-        dense_schema = db.exec(
+        user_database = db.exec(
 
             select(UserDatabases).where(
 
@@ -44,9 +43,10 @@ async def ensure_dense_schema ( state : AgentState , runtime : Runtime[Context] 
 
         ).first()
 
-    redis.setex(cache_key , 3600 , dense_schema.dense_schema )
+    redis.setex(cache_key , 3600 , user_database.dense_schema )
 
-    runtime.context.dense_schema = dense_schema.dense_schema    
+    runtime.context.dense_schema = user_database.dense_schema
+    runtime.context.encrypted_creds = user_database.encrypted_creds    
 
     return None
 
@@ -55,7 +55,7 @@ def add_dense_schema ( req : ModelRequest ) -> str :
 
     dense_schema = req.runtime.context.dense_schema
 
-    return f"{req.system_prompt} \n {dense_schema}"
+    return f"{req.system_prompt} \n Dense Schema :\n {dense_schema}"
 
 
 

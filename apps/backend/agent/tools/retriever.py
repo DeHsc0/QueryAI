@@ -3,6 +3,7 @@ from agent.tools.tools_arg_schema import Retrieve_Context
 from lib.helpers import get_qdrant_client
 import os
 from qdrant_client import models
+import json 
 
 @tool(args_schema=Retrieve_Context) 
 def retrieve_context ( query : str ,  runtime : ToolRuntime ): 
@@ -28,7 +29,7 @@ def retrieve_context ( query : str ,  runtime : ToolRuntime ):
         
     )
 
-    dense_query = models.Document(text=query , model=models.Document(
+    dense_query = models.Document(
 
                     text=query,                                          
                     model ="openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free",
@@ -39,7 +40,7 @@ def retrieve_context ( query : str ,  runtime : ToolRuntime ):
 
                   }  
 
-                ))
+                )
 
     sparse_query= models.Document(
 
@@ -84,7 +85,21 @@ def retrieve_context ( query : str ,  runtime : ToolRuntime ):
 
     )
 
-    print(results)
+    data =  []
+
+    for points in results.points:
+
+        raw_data = { "score" : points.score , "page_content" : points.payload.get("page_content") }
+
+        data.append( f"{json.dumps(raw_data)} \n")
+
+    final_result = "".join(data)
+
+    print(final_result)
+    
+    
+
+
 
 
 

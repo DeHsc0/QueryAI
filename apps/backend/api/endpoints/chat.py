@@ -48,7 +48,7 @@ async def chat (req : Request , data : Chat):
 
         config=config,
 
-        context=Context(tenant_id=tenant_id , db_type=None , dense_schema=None),
+        context=Context(tenant_id=tenant_id , db_type=None , dense_schema=None , encrypted_creds=None),
 
         version="v3", 
 

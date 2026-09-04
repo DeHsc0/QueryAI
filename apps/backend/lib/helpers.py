@@ -2,8 +2,9 @@
 from cryptography.fernet import Fernet
 import os , json
 from sqlalchemy.engine import URL
+from sqlalchemy import Engine
 from dotenv import load_dotenv
-from sqlmodel import create_engine , inspect
+from sqlmodel import create_engine , inspect 
 from schemas import Creds
 from typing import Dict
 from lib.config import get_qdrant_client
@@ -16,6 +17,7 @@ from db.dependency import engine
 from db.models import UserDatabases
 
 load_dotenv() 
+
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -44,19 +46,17 @@ def decrypt_credentials ( encrypted_creds : str ):
     
     return data
 
-
-
-def store_schema ( creds : Creds ):
+def get_db_engine (creds : Creds) -> Engine : 
 
     driver_types : Dict[ str , str ] = {
-
-        "mysql" : "mysql+pymysql",
-        "microsoft" : "mssql+pyodbc",
-        "postgresql" : "postgresql+psycopg2",
-        "oracle" : "oracle+oracledb"
-
-    }
-
+    
+            "mysql" : "mysql+pymysql",
+            "microsoft" : "mssql+pyodbc",
+            "postgresql" : "postgresql+psycopg2",
+            "oracle" : "oracle+oracledb"
+    
+        }
+    
     db_url = URL.create(
 
         drivername=f"{driver_types[creds.database_type]}",
@@ -69,6 +69,13 @@ def store_schema ( creds : Creds ):
     )
 
     engine = create_engine( url=db_url , pool_pre_ping=True)
+
+    return engine 
+    
+
+def store_schema ( creds : Creds ):
+
+    engine = get_db_engine(creds)
 
     db_dense_schema : List[str] = []
 

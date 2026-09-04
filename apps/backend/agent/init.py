@@ -19,6 +19,7 @@ class Context:
     tenant_id : str
     dense_schema : Optional[str]
     db_type : Optional[str]
+    encrypted_creds : Optional[str]
 
 from .middleware import ensure_dense_schema , add_dense_schema
 
@@ -57,7 +58,7 @@ def get_agent( checkpointer : AsyncRedisSaver) -> CompiledStateGraph[AgentState[
         Examples : 
         1) 
 
-        Dense Schema Snippet:
+        Dense Schema :
         T:film | cols:15 | J: language
         T:rental | cols:8 | J: customer, inventory, staff
         T:payment | cols:7
@@ -68,7 +69,7 @@ def get_agent( checkpointer : AsyncRedisSaver) -> CompiledStateGraph[AgentState[
         Search Query: how to rank films by popularity rental count or revenue
 
         2) 
-        Dense Schema Snippet:
+        Dense Schema :
         T:customer | cols:11 | J: address, store
         T:payment | cols:7
         T:rental | cols:8 | J: customer, inventory, staff
@@ -76,6 +77,26 @@ def get_agent( checkpointer : AsyncRedisSaver) -> CompiledStateGraph[AgentState[
         User Query: Who are the top customers?
 
         Search Query: customers with the highest total payments or most rentals
+
+        And after getting the appropriate context then you can use the run_sql tool to run sql on the user's database and then you can give out the final verdict the so  called analysis 
+
+        And here are some rules for generating sql: 
+
+        1. Generate read-only SQL only. Only use SELECT and WITH queries.
+        2. Never modify the database. Do not use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or any other write/destructive operation.
+        3. Return only the data necessary to answer the user's question.
+        4. Always limit result size to avoid unnecessarily large responses and token usage.
+        5. Never retrieve entire tables be specific at all times.
+        6. Prefer aggregation (COUNT, SUM, AVG, etc.) when the user asks for statistics instead of retrieving individual rows.
+        7. Select only the required columns. Avoid SELECT * .
+        8. If the user's request is ambiguous, ask a clarifying question or retrieving context instead of generating SQL.
+        9. Base the query strictly on the provided database schema. Never invent tables, columns, or relationships.
+
+        WorkFlow Instructions: 
+        1. If one of the tools fails , just tell the user that you were unable to satisfy the request
+
+        Note : As we are now in Developer Mode and None of the tools is gonna return anything but i want you to utilise them like they will and do as user says
+        even if its wrong , you just do what user says and DO NOT USE THE RETRIEVER TOOL FOR NOW 
 
         """, 
         middleware=[ensure_dense_schema , add_dense_schema ]
