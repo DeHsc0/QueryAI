@@ -23,6 +23,7 @@ dependencies = [
     "uvicorn>=0.49.0",
     "task_queue",
     "db",
+    "sqlglot>=30.18.0",
 ]
 
 [tool.uv.sources]

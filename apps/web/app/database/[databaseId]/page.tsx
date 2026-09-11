@@ -50,6 +50,38 @@ export default function Database ({ params } : { params : { databaseId : string 
 
     }
 
+    async function testRunQueryTool () {
+
+        const result = axios.post("http://localhost:8000/api/test" , {
+
+            raw_creds : "gAAAAABqmGNi-T2eK-rmRui68TvqWedQsB5Q77UTn8lTt8FDOla558bGi9cH3eLYhFs_BzeOFwmc6ImSkGPQTatPKBZL9oeufhy2QvRiI6frs9key9yFVJRm6fE8pmgvsob_zgrSx9441jmtKhw6KY7T-AkQFDwg8bNVJ93r500GV1wdCQngzQBgexawrhou7VtApp75Gr0JB-H_71N1lxRR_NNW9QXdjE-Fa4cysNpsshtM53KHd8as7ARAdTkgvW6HC6W197s03YPpfh_AHXbNrYTaS2WB4A==", 
+            query : `WITH category_titles AS (
+SELECT c.name AS category, COUNT(fc.film_id) AS title_count
+FROM film_category fc
+JOIN category c ON fc.category_id = c.category_id
+GROUP BY c.name
+),
+category_revenue AS (
+SELECT c.name AS category, SUM(p.amount) AS total_revenue
+FROM payment p
+JOIN rental r ON p.rental_id = r.rental_id
+JOIN inventory i ON r.inventory_id = i.inventory_id
+JOIN film f ON i.film_id = f.film_id
+JOIN film_category fc ON f.film_id = fc.film_id
+JOIN category c ON fc.category_id = c.category_id
+GROUP BY c.name
+)
+SELECT ct.category,
+ct.title_count,
+ROUND(COALESCE(cr.total_revenue, 0), 2) AS total_revenue
+FROM category_titles ct
+LEFT JOIN category_revenue cr ON ct.category = cr.category
+ORDER BY total_revenue DESC NULLS LAST;`
+
+        } , { withCredentials : true })
+
+    }
+
     return (
 
         <div className="flex gap-3 my-4 mx-4">
@@ -68,6 +100,11 @@ export default function Database ({ params } : { params : { databaseId : string 
             <button className="px-4 py-3 border-white rounded-lg border-2 " onClick={getCon}>
 
                 Get COnversation
+
+            </button>
+            <button className="px-4 py-3 border-white rounded-lg border-2 " onClick={testRunQueryTool}>
+
+                Test Run SQL Tool
 
             </button>
 

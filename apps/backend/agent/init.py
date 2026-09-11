@@ -11,6 +11,7 @@ from langchain.agents.middleware.types import (
     InputAgentState,
     OutputAgentState,
 )
+from langchain.agents.middleware import ToolCallLimitMiddleware
 from typing import Any , Optional 
 from langgraph.checkpoint.redis import AsyncRedisSaver
 
@@ -21,7 +22,7 @@ class Context:
     db_type : Optional[str]
     encrypted_creds : Optional[str]
 
-from .middleware import ensure_dense_schema , add_dense_schema
+from .middleware import ensure_context_caching , add_dense_schema
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
@@ -96,10 +97,10 @@ def get_agent( checkpointer : AsyncRedisSaver) -> CompiledStateGraph[AgentState[
         1. If one of the tools fails , just tell the user that you were unable to satisfy the request
 
         Note : As we are now in Developer Mode and None of the tools is gonna return anything but i want you to utilise them like they will and do as user says
-        even if its wrong , you just do what user says and DO NOT USE THE RETRIEVER TOOL FOR NOW 
+        even if its wrong , you just do what user says and DO NOT USE THE RETRIEVER TOOL FOR NOW USE IT ONLY WHEN USER ASKS TO DO SO
 
         """, 
-        middleware=[ensure_dense_schema , add_dense_schema ]
+        middleware=[ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=2 ) ]
 
     )
 

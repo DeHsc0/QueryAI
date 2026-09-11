@@ -5,7 +5,7 @@ import os
 from qdrant_client import models
 import json 
 
-@tool(args_schema=Retrieve_Context) 
+@tool(args_schema=Retrieve_Context ) 
 def retrieve_context ( query : str ,  runtime : ToolRuntime ): 
 
     """Retrieve context about the user's database schema"""
@@ -95,7 +95,7 @@ def retrieve_context ( query : str ,  runtime : ToolRuntime ):
 
     final_result = "".join(data)
 
-    print(final_result)
+    return final_result 
     
     
 

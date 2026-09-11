@@ -8,9 +8,10 @@ from db.dependency import get_db
 from fastapi import Depends
 from sqlmodel import Session , select
 from lib.config import get_redis_client
+import json
 
 @before_agent
-async def ensure_dense_schema ( state : AgentState , runtime : Runtime[Context] ): 
+async def ensure_context_caching ( state : AgentState , runtime : Runtime[Context] ): 
 
     cache_key = f"dense_schema:{runtime.context.tenant_id}"
 
@@ -22,11 +23,17 @@ async def ensure_dense_schema ( state : AgentState , runtime : Runtime[Context] 
 
     if cached:
 
-        print("Taking in from the cache")
+        cached_data = json.loads(cached)
 
-        print("TTL : " , redis.ttl(cache_key))
-        
-        runtime.context.dense_schema = cached
+        encrypted_creds = cached_data.get("encrypted_creds")
+        dense_schema = cached_data.get("dense_schema")
+        db_type = cached_data.get("db_type")
+
+        if encrypted_creds and dense_schema and db_type: 
+
+            runtime.context.db_type = db_type
+            runtime.context.dense_schema = dense_schema
+            runtime.context.encrypted_creds = encrypted_creds                
 
         return None 
 
@@ -43,10 +50,13 @@ async def ensure_dense_schema ( state : AgentState , runtime : Runtime[Context] 
 
         ).first()
 
-    redis.setex(cache_key , 3600 , user_database.dense_schema )
+        data = { "dense_schema" : user_database.dense_schema , "encrypted_creds" : user_database.encrypted_creds , "db_type" : user_database.database_soft}
 
-    runtime.context.dense_schema = user_database.dense_schema
-    runtime.context.encrypted_creds = user_database.encrypted_creds    
+        redis.setex(cache_key , 3600 , json.dumps(data) )
+
+        runtime.context.db_type = user_database.database_soft
+        runtime.context.dense_schema = user_database.dense_schema
+        runtime.context.encrypted_creds = user_database.encrypted_creds    
 
     return None
 
@@ -54,8 +64,9 @@ async def ensure_dense_schema ( state : AgentState , runtime : Runtime[Context] 
 def add_dense_schema ( req : ModelRequest ) -> str :
 
     dense_schema = req.runtime.context.dense_schema
+    db_type = req.runtime.context.db_type
 
-    return f"{req.system_prompt} \n Dense Schema :\n {dense_schema}"
+    return f"{req.system_prompt} \n Database Software : {db_type} \n Dense Schema :\n {dense_schema}"
 
 
 

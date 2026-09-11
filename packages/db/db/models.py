@@ -3,9 +3,17 @@ from typing import List , Optional
 import os
 import uuid 
 from dotenv import load_dotenv
-from sqlmodel import SQLModel , Field , Relationship , create_engine , Session
+from sqlmodel import SQLModel , Field , Relationship , create_engine , Session , Enum
 
 load_dotenv()
+
+[ "oracle" , "postgresql" , "mysql" , "microsoft" ]  
+
+class DatabaseTypes(str , Enum): 
+    "postgresql"
+    "mysql"
+    "oracle"
+    "microsoft"
 
 class User(SQLModel , table=True):
     __tablename__ = "users"
@@ -24,6 +32,7 @@ class UserDatabases( SQLModel , table=True ):
     user_clerk_id : str = Field( foreign_key="users.clerk_id" )
     encrypted_creds : str = Field()
     database_name : str = Field( unique=True) 
+    database_soft : str = DatabaseTypes
     description : str = Field()
     dense_schema : str = Field()
     user : Optional["User"] = Relationship( back_populates="databases")
