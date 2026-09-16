@@ -8,7 +8,7 @@ import json
 @tool(args_schema=Retrieve_Context ) 
 def retrieve_context ( query : str ,  runtime : ToolRuntime ): 
 
-    """Retrieve context about the user's database schema"""
+    """retrieve_context: Hybrid search over table/column schemas."""
 
     tenant_id = runtime.context.tenant_id
 

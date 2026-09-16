@@ -13,14 +13,14 @@ export default function Dashboard () {
 
             const response = await axios.post("http://localhost:8000/api/database" , {
 
-                database_name : "sadasdasd",
+                database_name : "alien",
                 description  : "adsadasdasd",
                 creds : {
                     database_type : "postgresql",
-                    username      : "postgres",
-                    password      : "123456",
+                    username      : "root",
+                    password      : "123123",
                     host          : "localhost",
-                    database      : "pagila",
+                    database      : "alien",
                     port          : 5432
 
                 }

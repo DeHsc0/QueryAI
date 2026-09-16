@@ -1,0 +1,15 @@
+[project]
+name = "evals"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "deepeval>=4.2.2",
+    "backend",
+    "langgraph>=1.2.11",
+    "google-genai>=2.23.0",
+]
+
+[tool.uv.sources]
+backend = { workspace = true }

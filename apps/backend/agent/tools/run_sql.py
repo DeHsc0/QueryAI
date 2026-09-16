@@ -7,7 +7,7 @@ from schemas import Creds
 import json
 from typing import Dict
 from decimal import Decimal 
-from sqlglot import parse_one , ParseError
+from sqlglot import parse_one , ParseError 
 
 @tool(args_schema=Run_Sql_Query)
 def run_sql( query : str , runtime : ToolRuntime ): 
@@ -18,8 +18,14 @@ def run_sql( query : str , runtime : ToolRuntime ):
         "GRANT", "REVOKE", "CREATE", "REPLACE", "EXECUTE", "CALL"]
 
     try:
+
+        if runtime.context.db_type == "postgresql": 
+            dialect = "postgres"
+        else: 
+            dialect = runtime.context.db_type
     
-        result = parse_one( query , read="postgres")
+        result = parse_one( query , read=dialect)
+
 
     except ParseError as e:
         return f"Invalid SQL syntax: {e}"
@@ -29,6 +35,8 @@ def run_sql( query : str , runtime : ToolRuntime ):
         if kw in query: 
             return "Error : Not a Read only query"
 
+    final_query = result.sql(dialect=dialect)
+    
     raw_creds : str = runtime.context.encrypted_creds
 
     creds = Creds.model_validate( decrypt_credentials(raw_creds)["creds"] )
@@ -38,10 +46,9 @@ def run_sql( query : str , runtime : ToolRuntime ):
     with Session(engine) as session: 
         results : CursorResult = session.exec(
 
-            text(query)
+            text(final_query)
 
         )        
-
 
         result = results.mappings().all()
 

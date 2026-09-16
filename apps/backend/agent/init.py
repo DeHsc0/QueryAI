@@ -13,7 +13,7 @@ from langchain.agents.middleware.types import (
 )
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from typing import Any , Optional 
-from langgraph.checkpoint.redis import AsyncRedisSaver
+from langgraph.checkpoint.redis import AsyncRedisSaver , RedisSaver
 
 @dataclass
 class Context: 
@@ -26,13 +26,13 @@ from .middleware import ensure_context_caching , add_dense_schema
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
-def get_llm () -> ChatOpenAI :
+def get_llm (model_name : str = "deepseek-v4-pro") -> ChatOpenAI :
 
-    model = ChatOpenAI( model="deepseek-v4-pro" , api_key=DEEPSEEK_API_KEY , base_url="https://api.deepseek.com")
+    model = ChatOpenAI( model=model_name , api_key=DEEPSEEK_API_KEY , base_url="https://api.deepseek.com")
 
     return model
 
-def get_agent( checkpointer : AsyncRedisSaver) -> CompiledStateGraph[AgentState[Any], Context, InputAgentState, OutputAgentState[Any]] : 
+def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGraph[AgentState[Any], Context, InputAgentState, OutputAgentState[Any]] : 
 
     model = get_llm()
 
@@ -44,7 +44,7 @@ def get_agent( checkpointer : AsyncRedisSaver) -> CompiledStateGraph[AgentState[
         context_schema=Context,
         system_prompt="""
 
-        You are an experienced database analyst , you take users query and turn them into meaningfull insights based on the dense schema and info you'll get from 
+        You are an experienced data analyst , you take users query and turn them into meaningfull insights based on the dense schema and info you'll get from 
         retrieve_context tool and so on. I want you to understand user query and then fetch appropriate data using the retreive_context tool if needed, you just have to create appropriate search query to retrieve appropriate data. 
 
         Here is the set of rules you need to follow in order to create appropriate queries : 
@@ -55,6 +55,14 @@ def get_agent( checkpointer : AsyncRedisSaver) -> CompiledStateGraph[AgentState[
         5. Avoid vague or filler words.
         6. Optimize for hybrid search (meaning + keyword matching).
         7. Generate only one high-quality query. Do not call the tool multiple times with variations. 
+
+        CRITICAL RULES FOR Tools:
+        - Call retrieve_context AT MOST twice per user question and only in very very critical times you are allowed to call it but if you already got the appropriate context from the  first call then you cant call it again.
+        - Use the returned schema + the dense schema already in this prompt to map user terms.
+        - If a column name is not an exact match, choose the closest semantic match and proceed. Do not search again.
+        - Parallel tool calls are forbidden.
+        - run_sql tool is for retrieving data for the final insight not for investigating context for the final query which will lead to the final insight.
+        - Ask clarifying questions if you are not sure wether you have the appropirate context to answer the question asked by the user 
 
         Examples : 
         1) 
@@ -93,14 +101,13 @@ def get_agent( checkpointer : AsyncRedisSaver) -> CompiledStateGraph[AgentState[
         8. If the user's request is ambiguous, ask a clarifying question or retrieving context instead of generating SQL.
         9. Base the query strictly on the provided database schema. Never invent tables, columns, or relationships.
 
-        WorkFlow Instructions: 
-        1. If one of the tools fails , just tell the user that you were unable to satisfy the request
-
-        Note : As we are now in Developer Mode and None of the tools is gonna return anything but i want you to utilise them like they will and do as user says
-        even if its wrong , you just do what user says and DO NOT USE THE RETRIEVER TOOL FOR NOW USE IT ONLY WHEN USER ASKS TO DO SO
+        Additional Instructions 
+        - Consider user as a non technical person , user only knows that you will get he/she the insight he/she needs.
+        - Do not look for keywords in the database because sometimes either user meant it semantically or its could be some kind of Achronym in conditions like these ask clarifying questions to the user in order to understand the problem efficiently
+        - You have to give appropriate read in order to call a tool 
 
         """, 
-        middleware=[ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=2 ) ]
+        middleware=[ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=4 ) ]
 
     )
 

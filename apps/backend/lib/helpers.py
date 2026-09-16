@@ -68,6 +68,8 @@ def get_db_engine (creds : Creds) -> Engine :
         
     )
 
+    print("\n\n\n\n DB URL" , db_url , "\n\n\n\n")
+
     engine = create_engine( url=db_url , pool_pre_ping=True)
 
     return engine 

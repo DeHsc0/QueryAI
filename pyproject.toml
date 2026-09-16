@@ -2,4 +2,9 @@
 name = "queryai" 
 
 [tool.uv.workspace]
-members = ["apps/backend", "apps/task_queue", "packages/db"]
+members = [
+    "apps/backend",
+    "apps/task_queue",
+    "packages/db",
+    "packages/evals",
+]
