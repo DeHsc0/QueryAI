@@ -24,6 +24,7 @@ dependencies = [
     "task_queue",
     "db",
     "sqlglot>=30.18.0",
+    "celery>=5.6.3",
 ]
 [build-system]
 requires = ["hatchling"]

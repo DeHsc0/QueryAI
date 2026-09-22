@@ -1,21 +1,20 @@
 from deepeval.dataset import EvaluationDataset 
 from deepeval.dataset.golden import Golden
-from deepeval.metrics import TaskCompletionMetric
-from agent.init import get_llm , get_agent , Context
+from deepeval.metrics import TaskCompletionMetric , StepEfficiencyMetric , ArgumentCorrectnessMetric , ToolCorrectnessMetric
+from agent.init import  get_agent , Context
 from deepeval.evaluate.configs import AsyncConfig, DisplayConfig
 from agent.memory.short import get_checkpointer
-from langchain.agents import create_agent 
-from deepeval.metrics import FaithfulnessMetric , ToolCorrectnessMetric , AnswerRelevancyMetric , GEval
 from deepeval.integrations.langchain import CallbackHandler
+from deepeval.models.base_model import DeepEvalBaseModel
 from dotenv import load_dotenv 
-from langchain.messages import HumanMessage
+from langchain.messages import HumanMessage 
 import asyncio
 from uuid import uuid4
+from deepeval.models.llms import OpenAIModel
+
 load_dotenv()
 
-
-
-data =[
+agent_data =[
   {
     "input": "I want to analyze how the Signal-to-Noise Quality Indicator (SNQI) varies across different weather conditions. For each weather condition, give weather condition name, the average SNQI, the median SNQI, and count how many analyzable signals there are. Sort the result by average SNQI in descending order.",
     "expected_output": {
@@ -74,31 +73,34 @@ data =[
   }
 ]
 
-import asyncio
-from uuid import uuid4
-from deepeval.dataset import EvaluationDataset
-from deepeval.dataset.golden import Golden
-from deepeval.metrics import TaskCompletionMetric, FaithfulnessMetric, AnswerRelevancyMetric, GEval
-from deepeval.integrations.langchain import CallbackHandler
-from dotenv import load_dotenv
-from langchain.messages import HumanMessage
-from agent.init import get_llm, get_agent, Context
 
 load_dotenv()
 
-dataset = EvaluationDataset(goldens=[Golden(input=data[0]["input"])])
+agent_eval_dataset = EvaluationDataset(goldens=[ Golden( input=agent_data[0]["input"] ) ] )
+
 sample_tenant_id = "user_3Hu8BOVwSh5Au9s8Pz7a0lx71AX__3ff2bd38-81fd-4b6c-8b0e-cc50c19a6232"
 
+agent_metrics = [ 
 
-task_completion = TaskCompletionMetric(
-    task="The task is to get the user the appropriate insight from his database by turning the natural language input into insight"
-)
+
+  StepEfficiencyMetric(  threshold=0.7 ), 
+
+  TaskCompletionMetric(
+
+  
+
+  threshold=0.7,
+
+  task="The task is to get the user the appropriate insight from his database by turning the natural language input into insight"),
+  
+  ArgumentCorrectnessMetric( threshold=0.7)
+
+  ]
+
 
 async def run_agent(prompt: str):
-    # Prefer an in-memory checkpointer for evals – Redis often causes hangs
-    # checkpointer = await get_checkpointer()
-    from langgraph.checkpoint.memory import MemorySaver
-    checkpointer = MemorySaver()
+    
+    checkpointer = await get_checkpointer()
 
     agent = get_agent(checkpointer=checkpointer)
 
@@ -119,13 +121,13 @@ async def run_agent(prompt: str):
     )
     return result
 
+for golden in agent_eval_dataset.evals_iterator(
+    
+    metrics=agent_metrics,
 
-# ---------- evaluation loop ----------
-# Force sync mode so DeepEval does not fight with asyncio
-for golden in dataset.evals_iterator(
-    metrics=[task_completion],
     async_config=AsyncConfig(run_async=False),
-    display_config=DisplayConfig(show_indicator=True, verbose_mode=True),
-):
-    # Safe way to run an async function when there is no event loop yet
+
+    display_config=DisplayConfig(show_indicator=True, verbose_mode=True , results_folder="./test_runs"),
+  ):
+    
     asyncio.run(run_agent(golden.input))

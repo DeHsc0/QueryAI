@@ -1,6 +1,8 @@
 from fastapi import APIRouter , Request 
 from pydantic import BaseModel 
 from sqlglot import parse_one , ParseError
+from task_queue.tasks import insert_chats_in_db
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
@@ -11,23 +13,14 @@ class TestModel(BaseModel):
 @router.post("/")
 def test ( req : Request , data : TestModel ):
 
-    query = data.query
+    result = insert_chats_in_db(message="hello from FastAPI")
 
-    BANNED_KEYWORDS = [
-            "DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE",
-            "GRANT", "REVOKE", "CREATE", "REPLACE", "EXECUTE", "CALL"]
     
-    try:
-    
-        result = parse_one( query , read="postgres")
-        final_query = result.sql()
 
-    except ParseError as e:
-        return f"Invalid SQL syntax: {e}"
+    print( "\n\n\n Result: " , result)
+    print( "\n\n\n Type of Result: " , type(result))
 
-    for kw in BANNED_KEYWORDS: 
 
-        if kw in query: 
-            return "Error : Not a Read only query"
+    return JSONResponse(content={"data" : ""})
 
 

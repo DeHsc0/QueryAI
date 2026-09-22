@@ -1,1 +1,1 @@
-{"OPENAI_MODEL_NAME": "deepseek-flash", "AZURE_OPENAI_ENDPOINT": "https://api.deepseek.com/", "AZURE_MODEL_NAME": "deepseek-flash", "USE_GEMINI_MODEL": "YES", "GEMINI_MODEL_NAME": "gemini-3.5-flash", "GOOGLE_GENAI_USE_VERTEXAI": "NO"}
+{"USE_DEEPSEEK_MODEL": "YES", "DEEPSEEK_MODEL_NAME": "deepseek-flash", "DEEPSEEK_COST_PER_OUTPUT_TOKEN": "6e-07", "DEEPSEEK_COST_PER_INPUT_TOKEN": "1.5e-07"}

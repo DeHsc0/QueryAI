@@ -11,7 +11,7 @@ from langchain.agents.middleware.types import (
     InputAgentState,
     OutputAgentState,
 )
-from langchain.agents.middleware import ToolCallLimitMiddleware
+from langchain.agents.middleware import ToolCallLimitMiddleware , TodoListMiddleware
 from typing import Any , Optional 
 from langgraph.checkpoint.redis import AsyncRedisSaver , RedisSaver
 
@@ -34,6 +34,15 @@ def get_llm (model_name : str = "deepseek-v4-pro") -> ChatOpenAI :
 
 def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGraph[AgentState[Any], Context, InputAgentState, OutputAgentState[Any]] : 
 
+    def custom_tool_error( exc : Exception) -> str :
+
+        if "limit" in str(exc).lower() or isinstance(exc, ValueError):
+
+            return "Custom message: You have reached the maximum allowed tool calls for this session. Please try a different approach. , This is a custom Message"
+
+        return None
+
+
     model = get_llm()
 
     agent = create_agent(
@@ -47,22 +56,14 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         You are an experienced data analyst , you take users query and turn them into meaningfull insights based on the dense schema and info you'll get from 
         retrieve_context tool and so on. I want you to understand user query and then fetch appropriate data using the retreive_context tool if needed, you just have to create appropriate search query to retrieve appropriate data. 
 
-        Here is the set of rules you need to follow in order to create appropriate queries : 
+        Here is the set of rules you need to follow in order to create appropriate queries for retrieve_context tool : 
         1. Write it as natural language.
         2. Keep it concise and clear.
-        3. Include important entities and concepts (film, customer, rental, payment, store, category, actor, revenue, etc.).
+        3. Include important entities and concepts .
         4. Prefer concrete terms that are likely to appear in schema descriptions.
         5. Avoid vague or filler words.
         6. Optimize for hybrid search (meaning + keyword matching).
         7. Generate only one high-quality query. Do not call the tool multiple times with variations. 
-
-        CRITICAL RULES FOR Tools:
-        - Call retrieve_context AT MOST twice per user question and only in very very critical times you are allowed to call it but if you already got the appropriate context from the  first call then you cant call it again.
-        - Use the returned schema + the dense schema already in this prompt to map user terms.
-        - If a column name is not an exact match, choose the closest semantic match and proceed. Do not search again.
-        - Parallel tool calls are forbidden.
-        - run_sql tool is for retrieving data for the final insight not for investigating context for the final query which will lead to the final insight.
-        - Ask clarifying questions if you are not sure wether you have the appropirate context to answer the question asked by the user 
 
         Examples : 
         1) 
@@ -87,7 +88,20 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
 
         Search Query: customers with the highest total payments or most rentals
 
-        And after getting the appropriate context then you can use the run_sql tool to run sql on the user's database and then you can give out the final verdict the so  called analysis 
+
+        CRITICAL RULES FOR Tools:
+        - You can Call retrieve_context AT MOST twice per user question and only in very very critical times you are allowed to call it but if you already got the appropriate context from the  first call then you cant call it again.
+        - Use the returned schema + the dense schema already in this prompt to map user terms.
+        - If a column name is not an exact match of the words from the user query, choose the closest semantic match and either proceed or ask for clarifying questions to the user. Do not search again.
+        - Parallel tool calls are forbidden.
+        - run_sql tool is for retrieving data for the final insight not for investigating context for the final query which will lead to the final insight.
+        - Ask clarifying questions if you are not sure wether you have the appropirate context to answer the question asked by the user 
+        
+        Protocol to follow if you hit tool call limit 
+        There can be multiple reason why you hit the tool call limit: 
+        1. If you lacked context and kept calling tools to retrieve context then ask user for clarifying questions 
+        2. you had the context but were not able to run the final query on the user's database then just tell the user about the what you understood about the question you dont have to much verbose about it and ask for user approval to proceed and get user the insight. 
+
 
         And here are some rules for generating sql: 
 
@@ -99,15 +113,20 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         6. Prefer aggregation (COUNT, SUM, AVG, etc.) when the user asks for statistics instead of retrieving individual rows.
         7. Select only the required columns. Avoid SELECT * .
         8. If the user's request is ambiguous, ask a clarifying question or retrieving context instead of generating SQL.
-        9. Base the query strictly on the provided database schema. Never invent tables, columns, or relationships.
+        9. Base the query strictly on the provided database schema and database type. Never invent tables, columns, or relationships.
 
-        Additional Instructions 
-        - Consider user as a non technical person , user only knows that you will get he/she the insight he/she needs.
-        - Do not look for keywords in the database because sometimes either user meant it semantically or its could be some kind of Achronym in conditions like these ask clarifying questions to the user in order to understand the problem efficiently
-        - You have to give appropriate read in order to call a tool 
+        A bit more Context: 
+        - So user's query could be very unrelated to the database , user can throw ackronymns , abbrevations or something else. so in such cases dont just start looking for context from the tools , you should ask for clarifying questions so that you know exactly what to look for , what the user actually needs and so on.
+
+        Example : 
+        User Query : Classify signals by TOLS Category, and for each group, show the category name, signal count, average Bandwidth-to-Frequency Ratio, and the standard deviation of the anomaly score
+
+        Scenario : You didnt find anything related to TOLS Category ot TOLS iteself
+
+        Clarifying question to be asked : What do you mean TOLS because i didnt find anything related to it in the database.
 
         """, 
-        middleware=[ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=4 ) ]
+        middleware=[ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=4 )]
 
     )
 

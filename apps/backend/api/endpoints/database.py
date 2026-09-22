@@ -11,6 +11,26 @@ from lib.config import get_qdrant_client
 from sqlmodel import Session, select
 
 router = APIRouter() 
+
+@router.get("/")
+async def get_databases(req : Request , session : Session =Depends(get_db)):
+
+    user_id : str = req.state.clerk.get("sub") 
+
+    user_db = session.exec(
+
+        select(UserDatabases).where(
+
+            UserDatabases.user_clerk_id == user_id,             
+
+        )
+
+    ).all()
+
+    user_db = [ db.model_dump_json() for db in user_db ]
+
+    return JSONResponse({ "data" : user_db })
+
  
 @router.post("/")
 async def create_database(req : Request ,  data : Database_Creation , session : Session =Depends(get_db)) :

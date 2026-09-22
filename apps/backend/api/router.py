@@ -1,5 +1,5 @@
 from fastapi import APIRouter 
-from .endpoints import auth , database , chat , conversation , test
+from .endpoints import auth , database , chat , conversation , test , turns
 
 api_router = APIRouter()
 
@@ -15,6 +15,14 @@ api_router.include_router(
     
     database.router,
     prefix="/database",
+    tags=["Auth"]
+
+)
+
+api_router.include_router(
+
+    turns.router, 
+    prefix="/turns", 
     tags=["Auth"]
 
 )

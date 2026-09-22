@@ -19,7 +19,7 @@ class Database_Creation(BaseModel):
     database_name : str = Field(
         pattern=r"^[a-z0-9]+$"
     )
-    description : str
+    description : Optional[str]
     creds : Creds
 
 class Chat(BaseModel): 

@@ -38,17 +38,30 @@ export default function Database ({ params } : { params : { databaseId : string 
     async function getCon () {
 
         const result = await axios.get(
-            "http://localhost:8000/api/conversation",
+            "http://localhost:8000/api/turns",
             {
             params: {
-                id: "its-working-i-guess",
-                thread_id: "11ccc471-6403-4229-bf82-d73ede25e4b6",
+                id: "3ff2bd38-81fd-4b6c-8b0e-cc50c19a6232",
+                thread_id: "3ff2bd38-81fd-4b6c-8b0e-cc50c19a6231",
             },
             withCredentials: true,
             }
         );
 
     }
+    
+    // async function getCon () {
+
+    //     const result = await axios.get(
+    //         "http://localhost:8000/api/database",
+    //         {
+    //             withCredentials: true,
+    //         }
+    //     );
+
+    //     console.log(result)
+
+    // }
 
     async function testRunQueryTool () {
 
