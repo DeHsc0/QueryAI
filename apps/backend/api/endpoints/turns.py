@@ -7,11 +7,12 @@ from db.models import Turns , Conversations
 from db.dependency import get_db
 from app_state import AppState
 from langchain_core.messages import  HumanMessage , AIMessage 
+from langgraph.checkpoint.redis import AsyncRedisSaver
 
 router = APIRouter()
 
 @router.get("/")
-def get_conversations (req : Request, id : Optional[str] = None , thread_id : Optional[str]  = None,  session : Session =Depends(get_db)) :
+async def get_conversations (req : Request, id : Optional[str] = None , thread_id : Optional[str]  = None,  session : Session =Depends(get_db)) :
 
     user_id : str = req.state.clerk.get("sub") 
 
@@ -24,16 +25,20 @@ def get_conversations (req : Request, id : Optional[str] = None , thread_id : Op
     
     state : AppState = req.app.state
 
-    checkpointer = state.checkpointer
+    checkpointer : AsyncRedisSaver = state.checkpointer
 
     config = {"configurable": { "thread_id": thread_id }}
 
-    t = checkpointer.get_tuple(config) 
+    t = await checkpointer.aget_tuple(config) 
+
+    print(t)
 
     turns = []
 
     if t:
         messages = t.checkpoint.get("channel_values", {}).get("messages", [])
+
+        print("Messages :" , messages)
         
         i = 0
         while i < len(messages):
@@ -72,16 +77,16 @@ def get_conversations (req : Request, id : Optional[str] = None , thread_id : Op
 
     else: 
 
-        results = session.exec(
-            select(Conversations)
-            .where(
+        # results = session.exec(
+        #     select(Conversations)
+        #     .where(
 
-                Conversations.id == thread_id, 
-                Conversations.database_id == id
+        #         Conversations.id == thread_id, 
+        #         Conversations.database_id == id
 
-            )
-        )
+        #     )
+        # )
 
-        print(results)
+        # print(results)
 
         return JSONResponse(content={ "Data" : ""})

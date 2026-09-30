@@ -12,8 +12,9 @@ from langchain.agents.middleware.types import (
     OutputAgentState,
 )
 from langchain.agents.middleware import ToolCallLimitMiddleware , TodoListMiddleware
-from typing import Any , Optional 
+from typing import Any , Optional , List 
 from langgraph.checkpoint.redis import AsyncRedisSaver , RedisSaver
+from db.models import Turns
 
 @dataclass
 class Context: 
@@ -22,7 +23,7 @@ class Context:
     db_type : Optional[str]
     encrypted_creds : Optional[str]
 
-from .middleware import ensure_context_caching , add_dense_schema
+from .middleware import ensure_context_caching , add_dense_schema 
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
@@ -34,13 +35,6 @@ def get_llm (model_name : str = "deepseek-v4-pro") -> ChatOpenAI :
 
 def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGraph[AgentState[Any], Context, InputAgentState, OutputAgentState[Any]] : 
 
-    def custom_tool_error( exc : Exception) -> str :
-
-        if "limit" in str(exc).lower() or isinstance(exc, ValueError):
-
-            return "Custom message: You have reached the maximum allowed tool calls for this session. Please try a different approach. , This is a custom Message"
-
-        return None
 
 
     model = get_llm()
@@ -126,7 +120,7 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         Clarifying question to be asked : What do you mean TOLS because i didnt find anything related to it in the database.
 
         """, 
-        middleware=[ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=4 )]
+        middleware=[ ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=4 )]
 
     )
 

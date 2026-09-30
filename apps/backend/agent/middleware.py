@@ -1,7 +1,7 @@
-from langchain.agents.middleware import dynamic_prompt , before_agent 
+from langchain.agents.middleware import dynamic_prompt , before_agent , wrap_model_call , ModelRequest , ModelResponse
 from langgraph.runtime import Runtime
 from langchain.agents.middleware.types import AgentState , ModelRequest
-from langchain.messages import SystemMessage
+from langchain.messages import SystemMessage , AIMessage , HumanMessage
 from .init import Context
 from db.models import UserDatabases , engine
 from db.dependency import get_db
@@ -9,25 +9,24 @@ from fastapi import Depends
 from sqlmodel import Session , select
 from lib.config import get_redis_client
 import json
+from typing import Callable
 
-@before_agent
+@before_agent(can_jump_to=["end"])
 async def ensure_context_caching ( state : AgentState , runtime : Runtime[Context] ): 
-
-    cache_key = f"dense_schema:{runtime.context.tenant_id}"
 
     user_id , db_id = runtime.context.tenant_id.split("__" , 1)
 
+    cache_key = f"dense_schema:{user_id}:{db_id}"
+
     redis = get_redis_client()
 
-    cached = redis.getex(cache_key)
+    cached = redis.json().get(cache_key , "$")
 
     if cached:
 
-        cached_data = json.loads(cached)
-
-        encrypted_creds = cached_data.get("encrypted_creds")
-        dense_schema = cached_data.get("dense_schema")
-        db_type = cached_data.get("db_type")
+        encrypted_creds = cached[0].get("encrypted_creds")
+        dense_schema = cached[0].get("dense_schema")
+        db_type = cached[0].get("db_type")
 
         if encrypted_creds and dense_schema and db_type: 
 
@@ -50,9 +49,18 @@ async def ensure_context_caching ( state : AgentState , runtime : Runtime[Contex
 
         ).first()
 
+        if user_database is None: 
+            return {
+            "messages": [AIMessage("Conversation limit reached.")],
+            "jump_to": "end"
+        }
+
         data = { "dense_schema" : user_database.dense_schema , "encrypted_creds" : user_database.encrypted_creds , "db_type" : user_database.database_soft}
 
-        redis.setex(cache_key , 3600 , json.dumps(data) )
+        
+        redis.json().set(cache_key , "$" , data )
+
+        redis.expire( cache_key , 60 * 60 * 2 )
 
         runtime.context.db_type = user_database.database_soft
         runtime.context.dense_schema = user_database.dense_schema
@@ -66,6 +74,8 @@ def add_dense_schema ( req : ModelRequest ) -> str :
     dense_schema = req.runtime.context.dense_schema
     db_type = req.runtime.context.db_type
 
+    print("\n\n\n\n\n\n" , req.state , "\n\n\n\n\n\n")
+    
     return f"{req.system_prompt} \n Database Software : {db_type} \n Dense Schema :\n {dense_schema}"
 
 

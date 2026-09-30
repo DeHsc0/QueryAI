@@ -24,7 +24,7 @@ class Database_Creation(BaseModel):
 
 class Chat(BaseModel): 
     query : str
-    conversation_id : str
+    conversation_id : Optional[str]
     db_id : str
 
 class ChatCreation(BaseModel):

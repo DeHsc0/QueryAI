@@ -7,7 +7,7 @@ async def get_checkpointer() -> AsyncRedisSaver :
     
     checkpointer = AsyncRedisSaver( redis_url=REDIS_URL , ttl={
 
-        "default_ttl" : 60 * 20,
+        "default_ttl" : 60 * 2,
         "refresh_on_read" : True
 
     } )

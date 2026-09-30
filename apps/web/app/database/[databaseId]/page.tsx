@@ -27,7 +27,7 @@ export default function Database ({ params } : { params : { databaseId : string 
 
         const result = await axios.post("http://localhost:8000/api/chat/" , {
             
-            conversation_id : "11ccc471-6403-4229-bf82-d73ede25e4b6",
+            conversation_id : "ff8d2f75-5b4d-46c6-9a1d-61456040a02b",
             query : chatInput,
             db_id : databaseId  
 
@@ -42,7 +42,7 @@ export default function Database ({ params } : { params : { databaseId : string 
             {
             params: {
                 id: "3ff2bd38-81fd-4b6c-8b0e-cc50c19a6232",
-                thread_id: "3ff2bd38-81fd-4b6c-8b0e-cc50c19a6231",
+                thread_id: "11ccc471-6403-4229-bf82-d73ede25e4b6",
             },
             withCredentials: true,
             }

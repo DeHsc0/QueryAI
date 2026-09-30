@@ -6,7 +6,8 @@ from clerk_backend_api import Clerk
 from db.dependency import get_db
 import os
 from db.models import User 
-from svix import Webhook
+import json 
+from svix.webhooks import Webhook
 from sqlalchemy.orm import Session
 from fastapi import APIRouter
 
@@ -23,18 +24,26 @@ async def auth (req : Request , session : Session = Depends(get_db)):
     
     payload = await req.body()
 
-    headers = {
-        "svix-id": req.headers.get("svix-id"),
-        "svix-timestamp": req.headers.get("svix-timestamp"),
-        "svix-signature": req.headers.get("svix-signature"),
-    }
+    headers = dict(req.headers)
+
+    # headers = {
+    #     "svix-id": req.headers.get("svix-id"),
+    #     "svix-timestamp": req.headers.get("svix-timestamp"),
+    #     "svix-signature": req.headers.get("svix-signature"),
+    # }
+
+    print("\n\n\n Payload : " , payload , "\n\n\n")
 
     try:
-        wh = Webhook(WEBHOOK_SECRET)
-        event = wh.verify(payload, headers)
-    
+
+        Webhook(WEBHOOK_SECRET).verify(payload, headers)
+
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid signature")
+
+    event = json.loads(payload)
+
+    print("\n\n\nEvent : " , event , "\n\n\n")
     
     event_type = event["type"]
     event_data = event["data"]
