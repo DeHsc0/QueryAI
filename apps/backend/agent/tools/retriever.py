@@ -1,9 +1,19 @@
 from langchain.tools import tool , ToolRuntime
-from agent.tools.tools_arg_schema import Retrieve_Context
 from lib.helpers import get_qdrant_client
 import os
 from qdrant_client import models
 import json 
+from pydantic import BaseModel , Field
+
+class Retrieve_Context(BaseModel):
+
+    query : str = Field(
+
+        description="Descriptive query to retrieve context from the vector database"
+
+    )
+
+
 
 @tool(args_schema=Retrieve_Context ) 
 def retrieve_context ( query : str ,  runtime : ToolRuntime ): 

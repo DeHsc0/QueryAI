@@ -3,6 +3,7 @@ from agent.memory.short import get_checkpointer
 from langchain_openai import ChatOpenAI
 from agent.tools.retriever import retrieve_context
 from agent.tools.run_sql import run_sql
+from agent.tools.add_memory import add_memory
 import os
 from dataclasses import dataclass
 from langgraph.graph.state import CompiledStateGraph
@@ -15,14 +16,7 @@ from langchain.agents.middleware import ToolCallLimitMiddleware , TodoListMiddle
 from typing import Any , Optional , List 
 from langgraph.checkpoint.redis import AsyncRedisSaver , RedisSaver
 from db.models import Turns
-
-@dataclass
-class Context: 
-    tenant_id : str
-    dense_schema : Optional[str]
-    db_type : Optional[str]
-    encrypted_creds : Optional[str]
-
+from .context import Context
 from .middleware import ensure_context_caching , add_dense_schema 
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
@@ -42,7 +36,7 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
     agent = create_agent(
 
         model, 
-        tools=[retrieve_context , run_sql ],
+        tools=[retrieve_context , run_sql , add_memory],
         checkpointer=checkpointer,
         context_schema=Context,
         system_prompt="""
@@ -82,6 +76,29 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
 
         Search Query: customers with the highest total payments or most rentals
 
+        add_memory tool:
+        
+        Only store durable, high-value information that will still be useful in future sessions.
+    
+        What to store:
+        - User preferences, or constraints
+        - Stable facts about the user
+        - Important facts you learned about the database, schema, or system behavior , after one or more than a retrieve_context too call 
+
+        What NOT to store:
+        - Temporary requests or one-off questions
+        - Vague or uncertain statements
+        - Information only relevant to the current turn
+
+        Writing rules:
+        1. One clear, self-contained fact per memory.
+        2. Be specific. Prefer concrete statements over vague ones.
+        3. Use the correct category: user_preference | db_fact 
+        4. Confidence must be between 0 and 1:
+
+        When to call add_memory: 
+            After each turn that is User query -> investigation (getting the context from retrieve_context) -> run_sql ( if needed ) -> final answer
+            i want you to check if that whole turns contains any db_facts or user_preferences that you could use later on. so that you dont have to do twice as efforts like calling retrieve_context tool multiple times or so.  
 
         CRITICAL RULES FOR Tools:
         - You can Call retrieve_context AT MOST twice per user question and only in very very critical times you are allowed to call it but if you already got the appropriate context from the  first call then you cant call it again.
@@ -120,7 +137,7 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         Clarifying question to be asked : What do you mean TOLS because i didnt find anything related to it in the database.
 
         """, 
-        middleware=[ ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=4 )]
+        middleware=[ ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=4 ) ]
 
     )
 

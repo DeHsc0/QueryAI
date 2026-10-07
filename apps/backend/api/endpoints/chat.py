@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage , AIMessage , ToolMessage , Sys
 from agent.init import Context
 from app_state import AppState
 from task_queue.tasks import insert_chats_in_db , Turn_data
-from typing import  Any , List
+from typing import  Any , List , Optional 
 from dataclasses import dataclass
 from sqlmodel import Session , select
 from db.models import Conversations , Turns , UserDatabases 
@@ -19,10 +19,10 @@ from langgraph.checkpoint.redis import AsyncRedisSaver
 
 @dataclass
 class Tool_Call: 
-    call_id : str | Any
-    args : Any 
-    tool_name : str | Any
-
+    call_id : str 
+    args : str
+    tool_name : str 
+    output : Optional[str]
 
 router = APIRouter()
 
@@ -171,8 +171,6 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
     messages.append(HumanMessage(content=data.query))
 
-    print("\n\n\n" , messages)
-
     agent = state.agent 
 
     tenant_id = f"{user_id}__{data.db_id}"
@@ -196,7 +194,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
         config=config,
 
-        context=Context( tenant_id=tenant_id , dense_schema=None , db_type=None , encrypted_creds=None),
+        context=Context( tenant_id=tenant_id , dense_schema=None , db_type=None , encrypted_creds=None , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}"),
 
         version="v3", 
 
@@ -206,13 +204,13 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
         chunk_type , chunk_data = chunk
 
-        if chunk_type == "tasks" and chunk_data["name"] == "tools" and chunk_data.get("input") and chunk_data["input"][0]["name"] == "run_sql":
+        if chunk_type == "tasks" and chunk_data["name"] == "tools" and chunk_data.get("input") and chunk_data["input"][0]["name"] == "run_sql" :
 
             tool_name = chunk_data["input"][0]["name"]
             call_id = chunk_data["input"][0]["id"]
             args = chunk_data["input"][0]["args"]
 
-            tool_calls.append(Tool_Call(call_id=call_id , tool_name=tool_name , args=args ))
+            tool_calls.append(Tool_Call(call_id=call_id , tool_name=tool_name , args=args , output=None))
 
         elif chunk_type == "updates" :
 
@@ -227,12 +225,11 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
                 if isinstance(tool_data , ToolMessage) :
                         
                     for calls in tool_calls:
-                        if calls.call_id == tool_data.tool_call_id: 
                             calls.output = tool_data.content     
 
     print( "\n\n\n" , agent_output , "\n\n\n" )
 
-    sql_queries = [ tool_call.args for tool_call in tool_calls ]
+    sql_queries = [ tool_call.args["query"] for tool_call in tool_calls ]
 
     turn_data = Turn_data( ai_response=agent_output , user_query=data.query , conversation_id=f"{data.conversation_id or new_convo_id }" , database_id=data.db_id , sql_query=sql_queries if len(sql_queries) > 0 else None   )
 

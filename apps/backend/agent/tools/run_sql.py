@@ -1,5 +1,4 @@
 from langchain.tools import tool , ToolRuntime
-from agent.tools.tools_arg_schema import Run_Sql_Query
 from sqlmodel import Session , text
 from sqlalchemy.engine.cursor import CursorResult
 from lib.helpers import get_db_engine , decrypt_credentials
@@ -8,6 +7,15 @@ import json
 from typing import Dict
 from decimal import Decimal 
 from sqlglot import parse_one , ParseError 
+from pydantic import BaseModel , Field
+
+class Run_Sql_Query(BaseModel):
+
+    query : str = Field(
+        description="Sql query"
+    )
+
+
 
 @tool(args_schema=Run_Sql_Query)
 def run_sql( query : str , runtime : ToolRuntime ): 
