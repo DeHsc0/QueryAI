@@ -1,11 +1,10 @@
 from langchain.agents import create_agent 
-from agent.memory.short import get_checkpointer
-from langchain_openai import ChatOpenAI
+from langchain_deepseek import ChatDeepSeek
 from agent.tools.retriever import retrieve_context
 from agent.tools.run_sql import run_sql
 from agent.tools.add_memory import add_memory
+from agent.tools.search_db_facts import search_db_facts
 import os
-from dataclasses import dataclass
 from langgraph.graph.state import CompiledStateGraph
 from langchain.agents.middleware.types import (
     AgentState,
@@ -13,30 +12,27 @@ from langchain.agents.middleware.types import (
     OutputAgentState,
 )
 from langchain.agents.middleware import ToolCallLimitMiddleware , TodoListMiddleware
-from typing import Any , Optional , List 
+from typing import Any 
 from langgraph.checkpoint.redis import AsyncRedisSaver , RedisSaver
-from db.models import Turns
 from .context import Context
 from .middleware import ensure_context_caching , add_dense_schema 
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
-def get_llm (model_name : str = "deepseek-v4-pro") -> ChatOpenAI :
+def get_llm (model_name : str = "deepseek-v4-pro") -> ChatDeepSeek :
 
-    model = ChatOpenAI( model=model_name , api_key=DEEPSEEK_API_KEY , base_url="https://api.deepseek.com")
+    model = ChatDeepSeek( model=model_name , api_key=DEEPSEEK_API_KEY , base_url="https://api.deepseek.com")
 
     return model
 
-def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGraph[AgentState[Any], Context, InputAgentState, OutputAgentState[Any]] : 
-
-
+def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGraph[AgentState[Any], Context, InputAgentState, OutputAgentState[Any]] :
 
     model = get_llm()
 
     agent = create_agent(
 
         model, 
-        tools=[retrieve_context , run_sql , add_memory],
+        tools=[retrieve_context , run_sql , add_memory , search_db_facts],
         checkpointer=checkpointer,
         context_schema=Context,
         system_prompt="""

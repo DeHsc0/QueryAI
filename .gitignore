@@ -20,6 +20,8 @@ pycache/
 
 # Testing
 coverage
+packages/evals/results/
+packages/evals/.deepeval/
 
 # Turbo
 .turbo

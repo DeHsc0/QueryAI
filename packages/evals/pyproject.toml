@@ -1,14 +1,14 @@
 [project]
 name = "evals"
 version = "0.1.0"
-description = "Add your description here"
+description = "DeepEval-based evaluation harness for the QueryAI agent"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "deepeval>=4.2.2",
+    "deepeval>=4.2.8",
     "backend",
     "langgraph>=1.2.11",
-    "google-genai>=2.23.0",
+    "langchain-deepseek>=0.1.0",
 ]
 
 [tool.uv.sources]

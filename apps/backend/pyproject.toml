@@ -26,6 +26,7 @@ dependencies = [
     "sqlglot>=30.18.0",
     "celery>=5.6.3",
     "mem0ai>=2.2.1",
+    "langchain-deepseek>=1.1.1",
 ]
 [build-system]
 requires = ["hatchling"]
