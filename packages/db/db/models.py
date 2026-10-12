@@ -35,7 +35,7 @@ class UserDatabases( SQLModel , table=True ):
     id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True )
     user_clerk_id : str = Field( foreign_key="users.clerk_id" , index=True )
     encrypted_creds : str = Field()
-    database_name : str = Field( unique=True) 
+    database_name : str = Field( index=True) 
     database_soft : str = DatabaseTypes
     description : str = Field()
     dense_schema : str = Field()

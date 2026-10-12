@@ -1,5 +1,3 @@
-
-
 from fastapi import APIRouter , Request
 from schemas import Chat
 from fastapi.responses import JSONResponse 
@@ -16,6 +14,8 @@ from fastapi import Depends
 from db.dependency import get_db
 from app_state import AppState
 from langgraph.checkpoint.redis import AsyncRedisSaver
+from lib.config import get_redis_client
+import json 
 
 @dataclass
 class Tool_Call: 
@@ -28,16 +28,55 @@ router = APIRouter()
 
 @router.post("/")
 async def chat (req : Request , data : Chat , session : Session = Depends(get_db)):
-
     state : AppState = req.app.state
 
     user_id : str = req.state.clerk.get("sub")
 
-    new_convo_id = None 
-    convo = None 
-    recent_turns = None 
+    redis = get_redis_client()    
 
-    if data.conversation_id is None: 
+    db_data = None 
+
+    recent_turns = None
+
+    current_msg = []
+
+    raw_db_data = redis.json().get(f"db_data:{user_id}:{data.db_id}")
+
+    db_data = json.loads(raw_db_data) if raw_db_data else None 
+
+    if not db_data: 
+
+        try: 
+            user_db = session.exec(
+            
+                select(UserDatabases).where(
+        
+                    UserDatabases.id == data.db_id, 
+                    UserDatabases.user_clerk_id == user_id
+        
+            )
+        
+            ).first()
+
+            if user_db is None:
+                return JSONResponse(content={"message": "Database not found", "success": False}, status_code=404)
+            
+            db_data = { "encrypted_creds" : user_db.encrypted_creds , "dense_schema": user_db.dense_schema , "db_type" : user_db.database_soft }
+
+            db_cache_key = f"db_data:{user_id}:{data.db_id}"
+
+            redis = get_redis_client()      
+
+            redis.json().set(db_cache_key , "$" , db_data)        
+
+            redis.expire(f"db_data:{user_id}:{data.db_id}" , 60 * 60 * 2)
+
+        except Exception as e:
+            return JSONResponse(content={"message" : f"{e}" , "success" : False } , status_code=500)
+
+    new_convo_id = None
+
+    if not data.conversation_id:
         llm = get_llm() 
         
         message = [ 
@@ -113,63 +152,48 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
         print("\n\n\n New Conversation Created :" , new_convo_id , "\n\n\n")
 
-    else :
+    else:
 
-        state : AppState = req.app.state
-        
-        checkpointer : AsyncRedisSaver = state.checkpointer
+        t = await state.checkpointer.aget_tuple({"configurable": {"thread_id": str(data.conversation_id)}})
+        messages = t.checkpoint["channel_values"].get("messages", []) if t else []
 
-        t = await checkpointer.aget_tuple({
+        if not messages:
+            try:
+                
+                conversation = session.exec(
+                    select(Conversations).where(
+                        Conversations.id == data.conversation_id,
+                        Conversations.database_id == data.db_id,
+                    )
+                ).first() 
 
-            "configurable" : {
-
-                "thread_id" : f"{data.conversation_id}"
-
-                }
-            })
-
-        in_memory = t.checkpoint["channel_values"].get("messages", []) if t else []
-
-        print("\n\n\n\n Length of the REdis short memory :" , len(in_memory) , "\n\n\n\n")
-
-        if not in_memory:
-
-            try: 
-
-                statement = select(Conversations).join(Conversations.user_database).where(Conversations.id == data.conversation_id).where(UserDatabases.user_clerk_id == user_id).where(Conversations.database_id == data.db_id)
-
-                convo = session.exec(statement).first()
+                if not conversation:
+                    return JSONResponse(
+                        content={"message": "Conversation not found", "success": False},
+                        status_code=301,
+                    )
 
                 turns = session.exec(
-
-                    select(Turns).where(
-
-                        Turns.conversation_id == convo.id
-
-                    )
-                    .order_by(Turns.created_at.desc())
+                    select(Turns)
+                    .where(Turns.conversation_id == conversation.id)
+                    .order_by(Turns.created_at.desc(), Turns.id.desc())
                     .limit(5)
-
                 ).fetchall()
 
+                recent_turns = [ turn for turn in turns ]
 
-                recent_turns = [ turn for turn in turns ] 
-
-            except Exception as e : 
-
-                return JSONResponse(content={ "message" : "Conversation Dosent Exist" , "success" : False , "data" : str(e) } , status_code=404)
-
-    messages = []
+            except Exception as e: 
+                return JSONResponse(content={"message" : e , "success" : False } , status_code=301)        
 
     if recent_turns:
 
         for turn in recent_turns:
-            messages.append(AIMessage(content=turn.ai_response))
-            messages.append(HumanMessage(content=turn.user_query))
+            current_msg.append(AIMessage(content=turn.ai_response))
+            current_msg.append(HumanMessage(content=turn.user_query))
 
-        messages.reverse()
+        current_msg.reverse()
 
-    messages.append(HumanMessage(content=data.query))
+    current_msg.append(HumanMessage(content=data.query))
 
     agent = state.agent 
 
@@ -186,15 +210,15 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
     tool_calls : List[Tool_Call] = []
 
-    agent_output : str
+    agent_output = None
 
     async for chunk in agent.astream( 
 
-        {"messages" : messages}, 
+        {"messages" : current_msg}, 
 
         config=config,
 
-        context=Context( tenant_id=tenant_id , dense_schema=None , db_type=None , encrypted_creds=None , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}"),
+        context=Context( tenant_id=tenant_id , dense_schema=db_data.get("dense_schema") , db_type=db_data.get("db_type") , encrypted_creds=db_data.get("encrypted_creds") , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}"),
 
         version="v3", 
 
@@ -240,3 +264,5 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
         "data" : ""
 
     } , status_code=200)
+
+

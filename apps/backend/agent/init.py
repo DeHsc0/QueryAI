@@ -15,7 +15,7 @@ from langchain.agents.middleware import ToolCallLimitMiddleware , TodoListMiddle
 from typing import Any 
 from langgraph.checkpoint.redis import AsyncRedisSaver , RedisSaver
 from .context import Context
-from .middleware import ensure_context_caching , add_dense_schema 
+from .middleware import add_dense_schema 
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
@@ -133,7 +133,7 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         Clarifying question to be asked : What do you mean TOLS because i didnt find anything related to it in the database.
 
         """, 
-        middleware=[ ensure_context_caching , add_dense_schema , ToolCallLimitMiddleware( run_limit=4 ) ]
+        middleware=[ add_dense_schema , ToolCallLimitMiddleware( run_limit=4 ) ]
 
     )
 

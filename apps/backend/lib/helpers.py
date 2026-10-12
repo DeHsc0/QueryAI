@@ -21,10 +21,15 @@ load_dotenv()
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
 
-if ENCRYPTION_KEY is None:
+if not QDRANT_COLLECTION: 
+    raise ValueError("QDRANT_COLLECTION environment variable is not set")
+
+if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY environment variable is not set")
-if OPENROUTER_API_KEY is None:
+
+if not OPENROUTER_API_KEY:
     raise ValueError("OPENROUTER_API_KEY environment variable is not set")
 
 fernet = Fernet(ENCRYPTION_KEY)
@@ -46,7 +51,7 @@ def decrypt_credentials ( encrypted_creds : str ):
     
     return data
 
-def get_db_engine (creds : Creds) -> Engine : 
+def get_db_engine (creds : Creds) : 
 
     driver_types : Dict[ str , str ] = {
     
@@ -72,7 +77,16 @@ def get_db_engine (creds : Creds) -> Engine :
 
     engine = create_engine( url=db_url , pool_pre_ping=True)
 
-    return engine 
+    db = Session(engine)
+
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
     
 
 def store_schema ( creds : Creds ):
@@ -200,7 +214,7 @@ def ingest_schema ( schema : List[str] , user_id : str , db_id : str ) :
 
     client.upload_points(
 
-        collection_name="queryai",
+        collection_name=QDRANT_COLLECTION,
         points=points,
         wait=True
 

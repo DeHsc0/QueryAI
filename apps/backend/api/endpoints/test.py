@@ -4,19 +4,140 @@ from sqlglot import parse_one , ParseError
 from task_queue.tasks import insert_chats_in_db , memory_write
 from fastapi.responses import JSONResponse
 import json
+from sqlmodel import Session , text
+from sqlalchemy.engine.cursor import CursorResult
+from lib.helpers import get_db_engine , decrypt_credentials
+from schemas import Creds
+import json
+from typing import Dict
+from decimal import Decimal 
+from sqlglot import parse_one , ParseError , parse , expressions as exp 
+from pydantic import BaseModel , Field
+
+
+class Run_Sql_Query(BaseModel):
+
+    query : str = Field(
+        description="Sql query"
+    )
+
+ALLOWED_TOP_LEVEL = (
+    exp.Select,
+    exp.Union,
+    exp.Intersect,
+    exp.Except,
+    exp.Query,
+)
+
+DANGEROUS_NODES = (
+    # DML
+    exp.Insert,
+    exp.Update,
+    exp.Delete,
+    exp.Merge,
+    # DDL
+    exp.Drop,
+    exp.Create,
+    exp.Alter,
+    exp.TruncateTable,
+    # Other dangerous
+    exp.Command,
+    exp.Transaction,
+    exp.Commit,
+    exp.Rollback,
+)
+
+def validate_read_only(sql_ast):
+    if len(sql_ast) != 1:
+        return "Only single SELECT statements allowed."
+
+    node = sql_ast[0]
+    if not isinstance(node, (exp.Select, exp.With, exp.Union, exp.Subquery)):
+        return f"Only SELECT queries allowed. Got: {type(node).__name__}"
+
+    if isinstance(node, exp.Select) and node.args.get("into"):
+        return "SELECT INTO is not allowed."
+
+    bad = node.find(
+        exp.Insert, exp.Update, exp.Delete, exp.Merge,
+        exp.Create, exp.Drop, exp.Alter, exp.TruncateTable, 
+        exp.Grant, exp.Copy, exp.Command, exp.Cache
+    )
+    if bad:
+        return f"Write operation not allowed: {type(bad).__name__}"
+
+    return None
+
+def run_sql( query : str , dialect : str = "postgres" , encrypted_creds : str = "gAAAAABqurr0vKfnfnQzza5A6D1kdm-7KILAHelJ3Aucqin5atAMuYmYMKnwHQHaYnjvbFRtdFgbfuCr75fLDdDkRgEDf1Ks5gdCOdAxk9IN4duf9aU7eRx-6IWy180BLFKbsIddV-PjiKwLzGeMEvdNGSM1tU_zRDO6-eGwMtj8VxfqtJHt9L5z-5MRAYGMeEGtFizbBU_32CpnZyCvrcE_Fz4_MCDSZDWTiFhxFXGEYuFUSjxD7gBsPyOdtVl8dXlYcb130PNb"): 
+    """Runs provided sql query on user's database"""
+
+    try:
+        
+        stmts = parse( query , read=dialect)
+
+        print("\nStatement : \n" , stmts)
+
+    except ParseError as e:
+        return f"Invalid SQL syntax: {e}"
+
+    is_valid_query = validate_read_only(sql_ast=stmts)
+
+    final_query = stmts[0].sql(dialect=dialect)
+    
+    raw_creds : str = encrypted_creds
+
+    creds = Creds.model_validate( decrypt_credentials(raw_creds)["creds"] )
+        
+    engine = get_db_engine(creds)
+
+    with Session(engine) as session: 
+        results : CursorResult = session.exec(
+
+            text(final_query)
+
+        )        
+
+        result = results.mappings().all()
+
+        temp_res = []
+
+        for el in result: 
+
+            item = dict(el)
+
+            for key , value in item.items():
+
+                if isinstance(value , Decimal):
+
+                    item[key] = float(item[key])
+
+            temp_res.append(item)     
+
+        final_result = json.dumps(temp_res)
+
+    print(final_result)
+
+    return final_result
 
 router = APIRouter()
-
-class TestModel(BaseModel): 
-    raw_creds : str
-    query : str
 
 @router.get("/")
 def test ( req : Request ):
 
-    data = [{'role': 'user', 'content': 'I want to analyze how the Signal-to-Noise Quality Indicator (SNQI) varies across different weather conditions. For each weather condition, give weather condition name, the average SNQI, the median SNQI, and count how many analyzable signals there are. Sort the result by average SNQI in descending order.'}, {'role': 'assistant', 'content': "called retrieve_context with args {'query': 'signal to noise ratio SNR quality indicator weather condition observational conditions analyzable signals'}"}, {'role': 'assistant', 'content': 'Tool retrieve_context returned: {"score": 0.8333334, "page_content": "Table : observationalconditions \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- obstime TIME  (nullable) \\n- obsdate DATE  (nullable) \\n- obsdurhrs NUMERIC(5, 2)  (nullable) \\nRelationships: - observationalconditions.signalref \\u2192 signals.signalregistry"} \n{"score": 0.8333334, "page_content": "Table : signals \\n\\nColumns : \\n- signalregistry CHAR(36)  (not null) \\n- timemark TIMESTAMP  (nullable) \\n- telescref CHAR(20)  (not null) \\n- detectinstr VARCHAR(50)  (nullable) \\n- signalclass VARCHAR(50)  (nullable) \\n- sigstrdb NUMERIC(7, 2)  (nullable) \\n- freqmhz NUMERIC(9, 3)  (nullable) \\n- bwhz NUMERIC(10, 3)  (nullable) \\n- centerfreqmhz NUMERIC(8, 3)  (nullable) \\n- freqdrifthzs NUMERIC(9, 3)  (nullable) \\n- doppshifthz DOUBLE PRECISION  (nullable) \\n- sigdursec NUMERIC(6, 2)  (nullable) \\n- pulsepersec NUMERIC(6, 3)  (nullable) \\n- pulsewidms NUMERIC(6, 3)  (nullable) \\n- modtype VARCHAR(30)  (nullable) \\n- modindex NUMERIC(6, 4)  (nullable) \\n- carrierfreqmhz NUMERIC(9, 3)  (nullable) \\n- phaseshiftdeg NUMERIC(6, 2)  (nullable) \\n- polarmode VARCHAR(30)  (nullable) \\n- polarangledeg NUMERIC(5, 1)  (nullable) \\n- snrratio NUMERIC(6, 2)  (nullable) \\n- noisefloordbm DOUBLE PRECISION  (nullable) \\n- interflvl VARCHAR(30)  (nullable) \\n- rfistat VARCHAR(30)  (nullable) \\n- atmointerf VARCHAR(30)  (nullable) \\nRelationships: - signals.telescref \\u2192 telescopes.telescregistry"} \n{"score": 0.325, "page_content": "Table : signalclassification \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- sigclasstype VARCHAR(40)  (nullable) \\n- sigpattern VARCHAR(60)  (nullable) \\n- repeatcount SMALLINT  (nullable) \\n- periodsec NUMERIC(12, 3)  (nullable) \\n- complexidx NUMERIC(6, 3)  (nullable) \\n- entropyval NUMERIC(6, 2)  (nullable) \\n- infodense NUMERIC(6, 3)  (nullable) \\n- classconf NUMERIC(5, 2)  (nullable) \\nRelationships: - signalclassification.signalref \\u2192 signals.signalregistry"} \n{"score": 0.26666668, "page_content": "Table : researchprocess \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- analysisprio TEXT  (nullable) \\n- followstat VARCHAR(25)  (nullable) \\n- peerrevstat VARCHAR(25)  (nullable) \\n- pubstat CHAR(25)  (nullable) \\n- resprio VARCHAR(30)  (nullable) \\n- fundstat CHAR(30)  (nullable) \\n- collabstat CHAR(35)  (nullable) \\n- secclass CHAR(35)  (nullable) \\n- discstat VARCHAR(40)  (nullable) \\n- notesmemo TEXT  (nullable) \\nRelationships: - researchprocess.signalref \\u2192 signals.signalregistry"} \n{"score": 0.25, "page_content": "Table : observatories \\n\\nColumns : \\n- observstation CHAR(60)  (not null) \\n- weathprofile VARCHAR(40)  (nullable) \\n- seeingprofile VARCHAR(50)  (nullable) \\n- atmostransparency NUMERIC(5, 3)  (nullable) \\n- lunarstage VARCHAR(25)  (nullable) \\n- lunardistdeg NUMERIC(7, 2)  (nullable) \\n- solarstatus VARCHAR(35)  (nullable) \\n- geomagstatus VARCHAR(35)  (nullable) \\n- sidereallocal CHAR(8)  (nullable) \\n- airtempc NUMERIC(5, 2)  (nullable) \\n- humidityrate NUMERIC(6, 3)  (nullable) \\n- windspeedms NUMERIC(4, 2)  (nullable) \\n- presshpa NUMERIC(6, 1)  (nullable) "} \n{"score": 0.25, "page_content": "Table : signaladvancedphenomena \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- intermedeffects VARCHAR(40)  (nullable) \\n- gravlens VARCHAR(50)  (nullable) \\n- quanteffects VARCHAR(85)  (nullable) \\n- encryptevid VARCHAR(40)  (nullable) \\n- langstruct TEXT  (nullable) \\n- msgcontent TEXT  (nullable) \\n- cultsig VARCHAR(60)  (nullable) \\n- sciimpact VARCHAR(50)  (nullable) \\nRelationships: - signaladvancedphenomena.signalref \\u2192 signals.signalregistry"} \n{"score": 0.2, "page_content": "Table : signaldecoding \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- encodetype VARCHAR(40)  (nullable) \\n- compressratio NUMERIC(6, 3)  (nullable) \\n- errcorrlvl VARCHAR(35)  (nullable) \\n- decodeconf NUMERIC(5, 2)  (nullable) \\n- decodemethod VARCHAR(35)  (nullable) \\n- decodestat VARCHAR(25)  (nullable) \\n- decodeiters SMALLINT  (nullable) \\n- proctimehrs NUMERIC(6, 2)  (nullable) \\n- compresources VARCHAR(50)  (nullable) \\n- analysisdp VARCHAR(25)  (nullable) \\n- veriflvl VARCHAR(30)  (nullable) \\n- confirmstat VARCHAR(30)  (nullable) \\nRelationships: - signaldecoding.signalref \\u2192 signals.signalregistry"} \n{"score": 0.16666667, "page_content": "Table : signaldynamics \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- sigintegrity VARCHAR(30)  (nullable) \\n- sigrecurr VARCHAR(25)  (nullable) \\n- sigevolve VARCHAR(25)  (nullable) \\n- tempstab VARCHAR(20)  (nullable) \\n- spatstab VARCHAR(20)  (nullable) \\n- freqstab VARCHAR(35)  (nullable) \\n- phasestab VARCHAR(35)  (nullable) \\n- ampstab VARCHAR(20)  (nullable) \\n- modstab VARCHAR(30)  (nullable) \\n- sigcoherence VARCHAR(25)  (nullable) \\n- sigdisp VARCHAR(25)  (nullable) \\n- sigscint VARCHAR(45)  (nullable) \\nRelationships: - signaldynamics.signalref \\u2192 signals.signalregistry"} \n{"score": 0.14285715, "page_content": "Table : signalprobabilities \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- falseposprob NUMERIC(5, 4)  (nullable) \\n- sigunique NUMERIC(7, 4)  (nullable) \\n- simindex NUMERIC(5, 4)  (nullable) \\n- corrscore NUMERIC(5, 4)  (nullable) \\n- anomscore DOUBLE PRECISION  (nullable) \\n- techsigprob NUMERIC(5, 4)  (nullable) \\n- biosigprob NUMERIC(6, 2)  (nullable) \\n- natsrcprob NUMERIC(7, 3)  (nullable) \\n- artsrcprob NUMERIC(3, 1)  (nullable) \\nRelationships: - signalprobabilities.signalref \\u2192 signals.signalregistry"} \n{"score": 0.11111111, "page_content": "Table : sourceproperties \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- sourceradeg NUMERIC(7, 4)  (nullable) \\n- sourcedecdeg NUMERIC(7, 4)  (nullable) \\n- sourcedistly NUMERIC(10, 2)  (nullable) \\n- gallong NUMERIC(6, 2)  (nullable) \\n- gallat NUMERIC(6, 2)  (nullable) \\n- celestobj VARCHAR(75)  (nullable) \\n- objtype VARCHAR(50)  (nullable) \\n- objmag NUMERIC(5, 2)  (nullable) \\n- objtempk INTEGER  (nullable) \\n- objmasssol NUMERIC(6, 3)  (nullable) \\n- objagegyr NUMERIC(6, 3)  (nullable) \\n- objmetal NUMERIC(5, 3)  (nullable) \\n- objpropmotion NUMERIC(7, 2)  (nullable) \\n- objradvel NUMERIC(7, 2)  (nullable) \\nRelationships: - sourceproperties.signalref \\u2192 signals.signalregistry"} \n'}, {'role': 'assistant', 'content': "called retrieve_context with args {'query': 'telescopes table columns observatory reference telescregistry observstation'}"}, {'role': 'assistant', 'content': 'Tool retrieve_context returned: {"score": 1.0, "page_content": "Table : telescopes \\n\\nColumns : \\n- telescregistry CHAR(20)  (not null) \\n- observstation CHAR(60)  (not null) \\n- equipstatus VARCHAR(35)  (nullable) \\n- calibrstatus VARCHAR(50)  (nullable) \\n- pointaccarc NUMERIC(6, 2)  (nullable) \\n- trackaccarc NUMERIC(6, 2)  (nullable) \\n- focusquality VARCHAR(25)  (nullable) \\n- detecttempk NUMERIC(7, 2)  (nullable) \\n- coolsysstatus VARCHAR(35)  (nullable) \\n- powerstatus VARCHAR(30)  (nullable) \\n- datastorstatus VARCHAR(35)  (nullable) \\n- netstatus VARCHAR(40)  (nullable) \\n- bandusagepct NUMERIC(5, 2)  (nullable) \\n- procqueuestatus VARCHAR(40)  (nullable) \\nRelationships: - telescopes.observstation \\u2192 observatories.observstation"} \n{"score": 0.6666667, "page_content": "Table : observatories \\n\\nColumns : \\n- observstation CHAR(60)  (not null) \\n- weathprofile VARCHAR(40)  (nullable) \\n- seeingprofile VARCHAR(50)  (nullable) \\n- atmostransparency NUMERIC(5, 3)  (nullable) \\n- lunarstage VARCHAR(25)  (nullable) \\n- lunardistdeg NUMERIC(7, 2)  (nullable) \\n- solarstatus VARCHAR(35)  (nullable) \\n- geomagstatus VARCHAR(35)  (nullable) \\n- sidereallocal CHAR(8)  (nullable) \\n- airtempc NUMERIC(5, 2)  (nullable) \\n- humidityrate NUMERIC(6, 3)  (nullable) \\n- windspeedms NUMERIC(4, 2)  (nullable) \\n- presshpa NUMERIC(6, 1)  (nullable) "} \n{"score": 0.5, "page_content": "Table : signals \\n\\nColumns : \\n- signalregistry CHAR(36)  (not null) \\n- timemark TIMESTAMP  (nullable) \\n- telescref CHAR(20)  (not null) \\n- detectinstr VARCHAR(50)  (nullable) \\n- signalclass VARCHAR(50)  (nullable) \\n- sigstrdb NUMERIC(7, 2)  (nullable) \\n- freqmhz NUMERIC(9, 3)  (nullable) \\n- bwhz NUMERIC(10, 3)  (nullable) \\n- centerfreqmhz NUMERIC(8, 3)  (nullable) \\n- freqdrifthzs NUMERIC(9, 3)  (nullable) \\n- doppshifthz DOUBLE PRECISION  (nullable) \\n- sigdursec NUMERIC(6, 2)  (nullable) \\n- pulsepersec NUMERIC(6, 3)  (nullable) \\n- pulsewidms NUMERIC(6, 3)  (nullable) \\n- modtype VARCHAR(30)  (nullable) \\n- modindex NUMERIC(6, 4)  (nullable) \\n- carrierfreqmhz NUMERIC(9, 3)  (nullable) \\n- phaseshiftdeg NUMERIC(6, 2)  (nullable) \\n- polarmode VARCHAR(30)  (nullable) \\n- polarangledeg NUMERIC(5, 1)  (nullable) \\n- snrratio NUMERIC(6, 2)  (nullable) \\n- noisefloordbm DOUBLE PRECISION  (nullable) \\n- interflvl VARCHAR(30)  (nullable) \\n- rfistat VARCHAR(30)  (nullable) \\n- atmointerf VARCHAR(30)  (nullable) \\nRelationships: - signals.telescref \\u2192 telescopes.telescregistry"} \n{"score": 0.4, "page_content": "Table : observationalconditions \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- obstime TIME  (nullable) \\n- obsdate DATE  (nullable) \\n- obsdurhrs NUMERIC(5, 2)  (nullable) \\nRelationships: - observationalconditions.signalref \\u2192 signals.signalregistry"} \n{"score": 0.26666668, "page_content": "Table : signaladvancedphenomena \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- intermedeffects VARCHAR(40)  (nullable) \\n- gravlens VARCHAR(50)  (nullable) \\n- quanteffects VARCHAR(85)  (nullable) \\n- encryptevid VARCHAR(40)  (nullable) \\n- langstruct TEXT  (nullable) \\n- msgcontent TEXT  (nullable) \\n- cultsig VARCHAR(60)  (nullable) \\n- sciimpact VARCHAR(50)  (nullable) \\nRelationships: - signaladvancedphenomena.signalref \\u2192 signals.signalregistry"} \n{"score": 0.16666667, "page_content": "Table : sourceproperties \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- sourceradeg NUMERIC(7, 4)  (nullable) \\n- sourcedecdeg NUMERIC(7, 4)  (nullable) \\n- sourcedistly NUMERIC(10, 2)  (nullable) \\n- gallong NUMERIC(6, 2)  (nullable) \\n- gallat NUMERIC(6, 2)  (nullable) \\n- celestobj VARCHAR(75)  (nullable) \\n- objtype VARCHAR(50)  (nullable) \\n- objmag NUMERIC(5, 2)  (nullable) \\n- objtempk INTEGER  (nullable) \\n- objmasssol NUMERIC(6, 3)  (nullable) \\n- objagegyr NUMERIC(6, 3)  (nullable) \\n- objmetal NUMERIC(5, 3)  (nullable) \\n- objpropmotion NUMERIC(7, 2)  (nullable) \\n- objradvel NUMERIC(7, 2)  (nullable) \\nRelationships: - sourceproperties.signalref \\u2192 signals.signalregistry"} \n{"score": 0.14285715, "page_content": "Table : researchprocess \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- analysisprio TEXT  (nullable) \\n- followstat VARCHAR(25)  (nullable) \\n- peerrevstat VARCHAR(25)  (nullable) \\n- pubstat CHAR(25)  (nullable) \\n- resprio VARCHAR(30)  (nullable) \\n- fundstat CHAR(30)  (nullable) \\n- collabstat CHAR(35)  (nullable) \\n- secclass CHAR(35)  (nullable) \\n- discstat VARCHAR(40)  (nullable) \\n- notesmemo TEXT  (nullable) \\nRelationships: - researchprocess.signalref \\u2192 signals.signalregistry"} \n{"score": 0.125, "page_content": "Table : signaldynamics \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- sigintegrity VARCHAR(30)  (nullable) \\n- sigrecurr VARCHAR(25)  (nullable) \\n- sigevolve VARCHAR(25)  (nullable) \\n- tempstab VARCHAR(20)  (nullable) \\n- spatstab VARCHAR(20)  (nullable) \\n- freqstab VARCHAR(35)  (nullable) \\n- phasestab VARCHAR(35)  (nullable) \\n- ampstab VARCHAR(20)  (nullable) \\n- modstab VARCHAR(30)  (nullable) \\n- sigcoherence VARCHAR(25)  (nullable) \\n- sigdisp VARCHAR(25)  (nullable) \\n- sigscint VARCHAR(45)  (nullable) \\nRelationships: - signaldynamics.signalref \\u2192 signals.signalregistry"} \n{"score": 0.11111111, "page_content": "Table : signalclassification \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- sigclasstype VARCHAR(40)  (nullable) \\n- sigpattern VARCHAR(60)  (nullable) \\n- repeatcount SMALLINT  (nullable) \\n- periodsec NUMERIC(12, 3)  (nullable) \\n- complexidx NUMERIC(6, 3)  (nullable) \\n- entropyval NUMERIC(6, 2)  (nullable) \\n- infodense NUMERIC(6, 3)  (nullable) \\n- classconf NUMERIC(5, 2)  (nullable) \\nRelationships: - signalclassification.signalref \\u2192 signals.signalregistry"} \n{"score": 0.09090909, "page_content": "Table : signaldecoding \\n\\nColumns : \\n- signalref CHAR(36)  (not null) \\n- encodetype VARCHAR(40)  (nullable) \\n- compressratio NUMERIC(6, 3)  (nullable) \\n- errcorrlvl VARCHAR(35)  (nullable) \\n- decodeconf NUMERIC(5, 2)  (nullable) \\n- decodemethod VARCHAR(35)  (nullable) \\n- decodestat VARCHAR(25)  (nullable) \\n- decodeiters SMALLINT  (nullable) \\n- proctimehrs NUMERIC(6, 2)  (nullable) \\n- compresources VARCHAR(50)  (nullable) \\n- analysisdp VARCHAR(25)  (nullable) \\n- veriflvl VARCHAR(30)  (nullable) \\n- confirmstat VARCHAR(30)  (nullable) \\nRelationships: - signaldecoding.signalref \\u2192 signals.signalregistry"} \n'}, {'role': 'assistant', 'content': "called run_sql with args {'query': 'SELECT \\n  o.weathprofile AS weather_condition,\\n  ROUND(AVG(s.snrratio), 2) AS avg_snqi,\\n  ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY s.snrratio), 2) AS median_snqi,\\n  COUNT(*) AS analyzable_signal_count\\nFROM signals s\\nJOIN telescopes t ON s.telescref = t.telescregistry\\nJOIN observatories o ON t.observstation = o.observstation\\nWHERE s.snrratio IS NOT NULL\\nGROUP BY o.weathprofile\\nORDER BY AVG(s.snrratio) DESC;'}"}, {'role': 'assistant', 'content': 'Tool run_sql returned: [{"weather_condition": "Clear", "avg_snqi": 11.48, "median_snqi": 12.02, "analyzable_signal_count": 354}, {"weather_condition": "Cloudy", "avg_snqi": 10.23, "median_snqi": 10.78, "analyzable_signal_count": 330}, {"weather_condition": "Partially Cloudy", "avg_snqi": 8.57, "median_snqi": 7.48, "analyzable_signal_count": 316}]'}, {'role': 'assistant', 'content': 'Here are your results! 🎉\n\n## SNQI by Weather Condition\n\n| Weather Condition | Avg SNQI | Median SNQI | Analyzable Signals |\n|-------------------|----------|-------------|--------------------|\n| Clear | 11.48 | 12.02 | 354 |\n| Cloudy | 10.23 | 10.78 | 330 |\n| Partially Cloudy | 8.57 | 7.48 | 316 |\n\n### Key takeaways\n\n- **Clear skies produce the best signal quality** — the highest average (11.48) and median (12.02) SNQI, plus the most analyzable signals (354).\n- **Cloudy conditions** come in second with a modest drop (~1.25 points on average).\n- **Partially Cloudy** has the lowest SNQI (avg 8.57) and the widest gap between average and median — meaning its SNR values skew higher than the typical (median) signal, likely due to some high-SNR outliers pulling the average up.\n\nThere\'s a clear, monotonic pattern: **clearer weather → higher Signal-to-Noise Quality**. 🌤️📡\n\n⚠️ *Reminder on assumptions I made (since the terms weren\'t answered earlier):* I mapped **SNQI → `snrratio`**, **weather → `weathprofile`**, and **"analyzable" → signals with a non-null `snrratio`**. If any of those should mean something else, let me know and I\'ll re-run it! 😊'}]
+    result = run_sql(query="""SELECT o.weathprofile AS weather_condition,
+       AVG(s.snrratio) AS avg_snqi,
+       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY s.snrratio) AS median_snqi,
+       COUNT(s.snrratio) AS analyzable_signal_count
+FROM signals s
+JOIN telescopes t ON s.telescref = t.telescregistry
+JOIN observatories o ON t.observstation = o.observstation
+WHERE s.snrratio IS NOT NULL
+  AND o.weathprofile IS NOT NULL
+GROUP BY o.weathprofile
+ORDER BY avg_snqi DESC;
+""")
 
-    memory_write.delay(json.dumps({ "messages" : data }))
+    print(result)
 
     return JSONResponse(content={"data" : ""})
 

@@ -1,12 +1,12 @@
 from langchain.tools import tool , ToolRuntime
 from sqlmodel import Session , text
 from sqlalchemy.engine.cursor import CursorResult
-from lib.helpers import get_db_engine , decrypt_credentials
+from lib.helpers import decrypt_credentials , get_db_engine
 from schemas import Creds
 import json
 from typing import Dict
 from decimal import Decimal 
-from sqlglot import parse_one , ParseError 
+from sqlglot import parse_one , ParseError , parse , expressions as exp 
 from pydantic import BaseModel , Field
 
 class Run_Sql_Query(BaseModel):
@@ -15,65 +15,85 @@ class Run_Sql_Query(BaseModel):
         description="Sql query"
     )
 
+def validate_read_only(sql_ast):
+    if len(sql_ast) != 1:
+        return "Only single SELECT statements allowed."
+
+    node = sql_ast[0]
+    if not isinstance(node, (exp.Select, exp.With, exp.Union, exp.Subquery)):
+        return f"Only SELECT queries allowed. Got: {type(node).__name__}"
+
+    if isinstance(node, exp.Select) and node.args.get("into"):
+        return "SELECT INTO is not allowed."
+
+    bad = node.find(
+        exp.Insert, exp.Update, exp.Delete, exp.Merge,
+        exp.Create, exp.Drop, exp.Alter, exp.TruncateTable, 
+        exp.Grant, exp.Copy, exp.Command, exp.Cache
+    )
+
+    if bad:
+        return f"Write operation not allowed: {type(bad).__name__}"
+
+    return None
+
 
 
 @tool(args_schema=Run_Sql_Query)
 def run_sql( query : str , runtime : ToolRuntime ): 
     """Runs provided sql query on user's database"""
 
-    BANNED_KEYWORDS = [
-        "DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "TRUNCATE",
-        "GRANT", "REVOKE", "CREATE", "REPLACE", "EXECUTE", "CALL"]
-
     try:
 
         if runtime.context.db_type == "postgresql": 
             dialect = "postgres"
-        else: 
+
+        elif runtime.context.db_type == "microsoft": 
+            dialect = "mssql"        
+        
+        else:  
             dialect = runtime.context.db_type
     
-        result = parse_one( query , read=dialect)
-
+        stmts = parse( query , read=dialect)
 
     except ParseError as e:
         return f"Invalid SQL syntax: {e}"
 
-    for kw in BANNED_KEYWORDS: 
+    not_valid_query = validate_read_only(sql_ast=stmts)
 
-        if kw in query: 
-            return "Error : Not a Read only query"
+    if not_valid_query : 
+        return not_valid_query
 
-    final_query = result.sql(dialect=dialect)
+    final_query = stmts[0].sql(dialect=dialect)
     
     raw_creds : str = runtime.context.encrypted_creds
 
     creds = Creds.model_validate( decrypt_credentials(raw_creds)["creds"] )
         
-    engine = get_db_engine(creds)
+    session : Session = get_db_engine(creds)
 
-    with Session(engine) as session: 
-        results : CursorResult = session.exec(
+    results : CursorResult = session.exec(
 
-            text(final_query)
+        text(final_query)
 
-        )        
+    )        
 
-        result = results.mappings().all()
+    result = results.mappings().all()
 
-        temp_res = []
+    temp_res = []
 
-        for el in result: 
+    for el in result: 
 
-            item = dict(el)
+        item = dict(el)
 
-            for key , value in item.items():
+        for key , value in item.items():
 
-                if isinstance(value , Decimal):
+            if isinstance(value , Decimal):
 
-                    item[key] = float(item[key])
+                item[key] = float(item[key])
 
-            temp_res.append(item)     
+        temp_res.append(item)     
 
-        final_result = json.dumps(temp_res)
+    final_result = json.dumps(temp_res)
 
     return final_result
