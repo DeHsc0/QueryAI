@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 import json
 from sqlmodel import Session , text
 from sqlalchemy.engine.cursor import CursorResult
-from lib.helpers import get_db_engine , decrypt_credentials
+from lib.helpers import get_db_generator , decrypt_credentials
 from schemas import Creds
 import json
 from typing import Dict
@@ -88,7 +88,7 @@ def run_sql( query : str , dialect : str = "postgres" , encrypted_creds : str = 
 
     creds = Creds.model_validate( decrypt_credentials(raw_creds)["creds"] )
         
-    engine = get_db_engine(creds)
+    engine = get_db_generator(creds)
 
     with Session(engine) as session: 
         results : CursorResult = session.exec(

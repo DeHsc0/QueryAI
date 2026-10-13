@@ -170,7 +170,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
                 if not conversation:
                     return JSONResponse(
                         content={"message": "Conversation not found", "success": False},
-                        status_code=301,
+                        status_code=404,
                     )
 
                 turns = session.exec(
@@ -183,7 +183,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
                 recent_turns = [ turn for turn in turns ]
 
             except Exception as e: 
-                return JSONResponse(content={"message" : e , "success" : False } , status_code=301)        
+                return JSONResponse(content={"message" : e , "success" : False } , status_code=404)        
 
     if recent_turns:
 
@@ -212,52 +212,63 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
     agent_output = None
 
-    async for chunk in agent.astream( 
+    try : 
 
-        {"messages" : current_msg}, 
+        async for chunk in agent.astream( 
 
-        config=config,
+            {"messages" : current_msg}, 
 
-        context=Context( tenant_id=tenant_id , dense_schema=db_data.get("dense_schema") , db_type=db_data.get("db_type") , encrypted_creds=db_data.get("encrypted_creds") , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}"),
+            config=config,
 
-        version="v3", 
+            context=Context( tenant_id=tenant_id , dense_schema=db_data.get("dense_schema") , db_type=db_data.get("db_type") , encrypted_creds=db_data.get("encrypted_creds") , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}"),
 
-        stream_mode=["updates" , "messages" , "tasks"]
+            version="v3", 
 
-    ):
+            stream_mode=["updates" , "messages" , "tasks"]
 
-        chunk_type , chunk_data = chunk
+        ):
 
-        if chunk_type == "tasks" and chunk_data["name"] == "tools" and chunk_data.get("input") and chunk_data["input"][0]["name"] == "run_sql" :
+            chunk_type , chunk_data = chunk
 
-            tool_name = chunk_data["input"][0]["name"]
-            call_id = chunk_data["input"][0]["id"]
-            args = chunk_data["input"][0]["args"]
+            if chunk_type == "tasks" and chunk_data["name"] == "tools" and chunk_data.get("input") and chunk_data["input"][0]["name"] == "run_sql" :
 
-            tool_calls.append(Tool_Call(call_id=call_id , tool_name=tool_name , args=args , output=None))
+                tool_name = chunk_data["input"][0]["name"]
+                call_id = chunk_data["input"][0]["id"]
+                args = chunk_data["input"][0]["args"]
 
-        elif chunk_type == "updates" :
+                tool_calls.append(Tool_Call(call_id=call_id , tool_name=tool_name , args=args , output=None))
 
-            if chunk_data.get("model") and isinstance( chunk_data["model"]["messages"][0] , AIMessage):
+            elif chunk_type == "updates" :
 
-                agent_output = chunk_data["model"]["messages"][0].content
-            
-            if chunk_data.get("tools"):
+                if chunk_data.get("model") and isinstance( chunk_data["model"]["messages"][0] , AIMessage):
 
-                tool_data = chunk_data["tools"]["messages"][0] 
+                    agent_output = chunk_data["model"]["messages"][0].content
+                
+                if chunk_data.get("tools"):
 
-                if isinstance(tool_data , ToolMessage) :
-                        
-                    for calls in tool_calls:
-                            calls.output = tool_data.content     
+                    tool_data = chunk_data["tools"]["messages"][0]
+
+                    if isinstance(tool_data , ToolMessage):
+
+                        for calls in tool_calls: 
+
+                            if tool_data.tool_call_id == calls.call_id: 
+
+                                calls.output = chunk_data["tools"]["messages"][0]    
+        
+    except Exception as e : 
+
+        return JSONResponse( content={ "message" : "Unable to process your request" , "success" : False } , status_code=500 )
 
     print( "\n\n\n" , agent_output , "\n\n\n" )
 
     sql_queries = [ tool_call.args["query"] for tool_call in tool_calls ]
 
-    turn_data = Turn_data( ai_response=agent_output , user_query=data.query , conversation_id=f"{data.conversation_id or new_convo_id }" , database_id=data.db_id , sql_query=sql_queries if len(sql_queries) > 0 else None   )
-
-    result = insert_chats_in_db.delay(turn_data.model_dump())
+    if agent_output : 
+        
+        turn_data = Turn_data( ai_response=agent_output , user_query=data.query , conversation_id=f"{data.conversation_id or new_convo_id }" , database_id=data.db_id , sql_query=sql_queries if len(sql_queries) > 0 else None   )
+        
+        result = insert_chats_in_db.delay(turn_data.model_dump())
 
     return JSONResponse(content={
 

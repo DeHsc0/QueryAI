@@ -12,7 +12,7 @@ class Memory_Category(str , Enum):
 
 class Memories(BaseModel): 
     
-    confidence_score : str = Field( description="How confident you are that this memory is accurate and worth keeping (0.0–1.0)")
+    confidence_score : float = Field( ge=0.5 , le=1.0 , description="How confident you are that this memory is accurate and worth keeping (0.0–1.0)")
 
     memory : str = Field(description="A clear, self-contained, durable statement that will still be useful in future conversations. One distinct idea only.")
     
@@ -23,7 +23,7 @@ class Memories(BaseModel):
 def add_memory(data : List[Memories] , runtime : ToolRuntime[Context] ): 
     """
     Store high-quality long-term memories (user preferences, stable facts, or learned database/schema knowledge).
-    Only store clear, durable information with confidence ≥ 0.7. One specific fact per memory.
+    Only store clear, durable information with confidence ≥ 0.5. One specific fact per memory.
     
     """
     user_id , db_id = runtime.context.tenant_id.split("__" , 1)

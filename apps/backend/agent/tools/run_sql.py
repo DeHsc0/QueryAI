@@ -1,13 +1,15 @@
 from langchain.tools import tool , ToolRuntime
 from sqlmodel import Session , text
 from sqlalchemy.engine.cursor import CursorResult
-from lib.helpers import decrypt_credentials , get_db_engine
+from lib.helpers import decrypt_credentials , get_db_generator
 from schemas import Creds
 import json
 from typing import Dict
 from decimal import Decimal 
 from sqlglot import parse_one , ParseError , parse , expressions as exp 
 from pydantic import BaseModel , Field
+
+MAX_ROWS = 50 
 
 class Run_Sql_Query(BaseModel):
 
@@ -70,16 +72,17 @@ def run_sql( query : str , runtime : ToolRuntime ):
 
     creds = Creds.model_validate( decrypt_credentials(raw_creds)["creds"] )
         
-    session : Session = get_db_engine(creds)
+    db_gen = get_db_generator(creds)
 
-    results : CursorResult = session.exec(
+    db , engine = next(db_gen)
+
+    results : CursorResult = db.exec(
 
         text(final_query)
 
     )        
 
-    result = results.mappings().all()
-
+    result = results.mappings().fetchmany( size=MAX_ROWS + 1 )
     temp_res = []
 
     for el in result: 

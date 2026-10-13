@@ -51,7 +51,7 @@ def decrypt_credentials ( encrypted_creds : str ):
     
     return data
 
-def get_db_engine (creds : Creds) : 
+def get_db_generator (creds : Creds) : 
 
     driver_types : Dict[ str , str ] = {
     
@@ -80,7 +80,7 @@ def get_db_engine (creds : Creds) :
     db = Session(engine)
 
     try:
-        yield db
+        yield db , engine
         db.commit()
     except Exception:
         db.rollback()
@@ -91,7 +91,7 @@ def get_db_engine (creds : Creds) :
 
 def store_schema ( creds : Creds ):
 
-    engine = get_db_engine(creds)
+    db , engine = next(get_db_generator(creds))
 
     db_dense_schema : List[str] = []
 

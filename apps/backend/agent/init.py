@@ -29,10 +29,12 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
 
     model = get_llm()
 
+    tools = [retrieve_context , run_sql , add_memory , search_db_facts]
+
     agent = create_agent(
 
-        model, 
-        tools=[retrieve_context , run_sql , add_memory , search_db_facts],
+        model.bind_tools( tools , parallel_tool_calls=False), 
+        tools=tools,
         checkpointer=checkpointer,
         context_schema=Context,
         system_prompt="""
@@ -100,7 +102,6 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         - You can Call retrieve_context AT MOST twice per user question and only in very very critical times you are allowed to call it but if you already got the appropriate context from the  first call then you cant call it again.
         - Use the returned schema + the dense schema already in this prompt to map user terms.
         - If a column name is not an exact match of the words from the user query, choose the closest semantic match and either proceed or ask for clarifying questions to the user. Do not search again.
-        - Parallel tool calls are forbidden.
         - run_sql tool is for retrieving data for the final insight not for investigating context for the final query which will lead to the final insight.
         - Ask clarifying questions if you are not sure wether you have the appropirate context to answer the question asked by the user 
         
@@ -133,7 +134,11 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         Clarifying question to be asked : What do you mean TOLS because i didnt find anything related to it in the database.
 
         """, 
-        middleware=[ add_dense_schema , ToolCallLimitMiddleware( run_limit=4 ) ]
+        middleware=[ 
+            add_dense_schema, 
+            ToolCallLimitMiddleware( tool_name="retrieve_context", run_limit=2 ),
+            ToolCallLimitMiddleware( tool_name="run_sql" , run_limit=2) 
+            ]
 
     )
 
