@@ -1,7 +1,7 @@
 from langchain.tools import tool , ToolRuntime
 from sqlmodel import Session , text
 from sqlalchemy.engine.cursor import CursorResult
-from lib.helpers import decrypt_credentials , get_db_generator
+from lib.helpers import decrypt_credentials , get_user_db
 from schemas import Creds
 import json
 from typing import Dict
@@ -71,32 +71,30 @@ def run_sql( query : str , runtime : ToolRuntime ):
     raw_creds : str = runtime.context.encrypted_creds
 
     creds = Creds.model_validate( decrypt_credentials(raw_creds)["creds"] )
-        
-    db_gen = get_db_generator(creds)
 
-    db , engine = next(db_gen)
+    with get_user_db(creds) as (db, engine ) : 
 
-    results : CursorResult = db.exec(
+        results : CursorResult = db.exec(
 
-        text(final_query)
+            text(final_query)
 
-    )        
+        )        
 
-    result = results.mappings().fetchmany( size=MAX_ROWS + 1 )
-    temp_res = []
+        result = results.mappings().fetchmany( size=MAX_ROWS + 1 )
+        temp_res = []
 
-    for el in result: 
+        for el in result: 
 
-        item = dict(el)
+            item = dict(el)
 
-        for key , value in item.items():
+            for key , value in item.items():
 
-            if isinstance(value , Decimal):
+                if isinstance(value , Decimal):
 
-                item[key] = float(item[key])
+                    item[key] = float(item[key])
 
-        temp_res.append(item)     
+            temp_res.append(item)     
 
-    final_result = json.dumps(temp_res)
+        final_result = json.dumps(temp_res)
 
     return final_result

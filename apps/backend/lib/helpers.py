@@ -15,6 +15,7 @@ from typing import List
 from sqlmodel import Session , select
 from db.dependency import engine
 from db.models import UserDatabases
+from contextlib import contextmanager
 
 load_dotenv() 
 
@@ -51,7 +52,8 @@ def decrypt_credentials ( encrypted_creds : str ):
     
     return data
 
-def get_db_generator (creds : Creds) : 
+@contextmanager
+def get_user_db (creds : Creds) : 
 
     driver_types : Dict[ str , str ] = {
     
@@ -91,77 +93,77 @@ def get_db_generator (creds : Creds) :
 
 def store_schema ( creds : Creds ):
 
-    db , engine = next(get_db_generator(creds))
+    with get_user_db(creds) as (db, engine): 
 
-    db_dense_schema : List[str] = []
+        db_dense_schema : List[str] = []
 
-    schema : List[str] = []
+        schema : List[str] = []
 
-    with engine.connect() as conn: 
-        inspector = inspect(conn)
+        with engine.connect() as conn: 
+            inspector = inspect(conn)
 
-        table_names = inspector.get_table_names()
+            table_names = inspector.get_table_names()
 
-        db_dense_schema.append(f"Number of Tables: {len(table_names)} \n")
+            db_dense_schema.append(f"Number of Tables: {len(table_names)} \n")
 
-        for name in table_names:
+            for name in table_names:
 
-            lines = [f"Table : {name} \n\nColumns : "]
+                lines = [f"Table : {name} \n\nColumns : "]
 
-            relationships = []
-                
-            cols = inspector.get_columns(name)
+                relationships = []
+                    
+                cols = inspector.get_columns(name)
 
-            db_dense_schema.append(f"T:{name} | cols:{len(cols)}")
+                db_dense_schema.append(f"T:{name} | cols:{len(cols)}")
 
-            foreign_keys = inspector.get_foreign_keys(name)
+                foreign_keys = inspector.get_foreign_keys(name)
 
-            if foreign_keys.__len__() > 0: 
+                if foreign_keys.__len__() > 0: 
 
-                last_index_fk = len(foreign_keys) - 1 
+                    last_index_fk = len(foreign_keys) - 1 
 
-                db_dense_schema.append(" | J:")
+                    db_dense_schema.append(" | J:")
 
-                for fk in foreign_keys:
+                    for fk in foreign_keys:
 
-                    constrained_cols = ", ".join(fk["constrained_columns"])
-                    referred_table = fk["referred_table"]
-                    referred_cols = ", ".join(fk["referred_columns"])
+                        constrained_cols = ", ".join(fk["constrained_columns"])
+                        referred_table = fk["referred_table"]
+                        referred_cols = ", ".join(fk["referred_columns"])
 
-                    if foreign_keys.index(fk) == last_index_fk: 
+                        if foreign_keys.index(fk) == last_index_fk: 
 
-                        db_dense_schema.append(f" {referred_table} \n")
+                            db_dense_schema.append(f" {referred_table} \n")
 
-                    else : 
+                        else : 
 
-                        db_dense_schema.append(f" {referred_table} , ")
+                            db_dense_schema.append(f" {referred_table} , ")
 
-                    relationships.append(
-                        f"{name}.{constrained_cols} → {referred_table}.{referred_cols}"
-                    )
-            else: 
-                db_dense_schema.append("\n")
+                        relationships.append(
+                            f"{name}.{constrained_cols} → {referred_table}.{referred_cols}"
+                        )
+                else: 
+                    db_dense_schema.append("\n")
 
-            for col in cols: 
+                for col in cols: 
 
-                nullable = "nullable" if col.get("nullable" , True) else "not null"
+                    nullable = "nullable" if col.get("nullable" , True) else "not null"
 
-                comment = f"{col['comment']}" if col.get("comment") else ""
-                
-                lines.append(f"\n- {col["name"]} {str(col.get("type"))}  ({nullable}) {comment}")
+                    comment = f"{col['comment']}" if col.get("comment") else ""
+                    
+                    lines.append(f"\n- {col["name"]} {str(col.get("type"))}  ({nullable}) {comment}")
 
-            if relationships.__len__() > 0:
+                if relationships.__len__() > 0:
 
-                lines.append(f"\nRelationships: ")
+                    lines.append(f"\nRelationships: ")
 
-                for relations in relationships: 
-                    lines.append(f"- {relations}")
+                    for relations in relationships: 
+                        lines.append(f"- {relations}")
 
-            table_schema = "".join(lines)
+                table_schema = "".join(lines)
 
-            schema.append(table_schema)
+                schema.append(table_schema)
 
-    db_dense_schema = "".join(db_dense_schema)
+        db_dense_schema = "".join(db_dense_schema)
 
     return schema , db_dense_schema
 

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional , Any
 
 @dataclass
 class Context: 
@@ -8,3 +8,4 @@ class Context:
     dense_schema : Optional[str]
     db_type : Optional[str]
     encrypted_creds : Optional[str]
+    user_prefs : Optional[Any]

@@ -16,6 +16,7 @@ from app_state import AppState
 from langgraph.checkpoint.redis import AsyncRedisSaver
 from lib.config import get_redis_client
 import json 
+from agent.memory.long import mem0
 
 @dataclass
 class Tool_Call: 
@@ -43,6 +44,8 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
     raw_db_data = redis.json().get(f"db_data:{user_id}:{data.db_id}")
 
     db_data = json.loads(raw_db_data) if raw_db_data else None 
+
+    user_prefs = None 
 
     if not db_data: 
 
@@ -185,6 +188,29 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
             except Exception as e: 
                 return JSONResponse(content={"message" : e , "success" : False } , status_code=404)        
 
+        user_pref_cache_key = f"user_prefs:{user_id}:{data.db_id}:{data.conversation_id}"
+
+        cached_user_prefs = redis.json().get(f"user_prefs:{user_id}:{data.db_id}:{data.conversation_id}")
+
+        user_prefs = json.loads(cached_user_prefs) if cached_user_prefs else None 
+
+        if not cached_user_prefs :
+
+            result = mem0.get_all(
+
+                filters={
+                    "AND": [
+                        {"user_id": user_id},
+                        {"app_id": data.db_id},
+                        {"run_id": f"{new_convo_id if new_convo_id else data.conversation_id }"},
+                    ]
+                }
+            )
+
+            user_prefs = result
+            
+            redis.json().set(user_pref_cache_key , "$" , result)
+
     if recent_turns:
 
         for turn in recent_turns:
@@ -220,7 +246,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
             config=config,
 
-            context=Context( tenant_id=tenant_id , dense_schema=db_data.get("dense_schema") , db_type=db_data.get("db_type") , encrypted_creds=db_data.get("encrypted_creds") , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}"),
+            context=Context( tenant_id=tenant_id , dense_schema=db_data.get("dense_schema") , db_type=db_data.get("db_type") , encrypted_creds=db_data.get("encrypted_creds") , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}" , user_prefs=user_prefs),
 
             version="v3", 
 
@@ -258,14 +284,14 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
         
     except Exception as e : 
 
-        return JSONResponse( content={ "message" : "Unable to process your request" , "success" : False } , status_code=500 )
+        return JSONResponse( content={ "message" : e , "success" : False } , status_code=500 )
 
     print( "\n\n\n" , agent_output , "\n\n\n" )
 
     sql_queries = [ tool_call.args["query"] for tool_call in tool_calls ]
 
     if agent_output : 
-        
+
         turn_data = Turn_data( ai_response=agent_output , user_query=data.query , conversation_id=f"{data.conversation_id or new_convo_id }" , database_id=data.db_id , sql_query=sql_queries if len(sql_queries) > 0 else None   )
         
         result = insert_chats_in_db.delay(turn_data.model_dump())

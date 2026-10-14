@@ -57,7 +57,7 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
 
     encrypt_data = encrypt_credentials( data.creds )
 
-    schema , db_dense_schema = store_schema( data.creds , session )
+    schema , db_dense_schema = store_schema( data.creds )
 
     database =  UserDatabases(
         user_clerk_id=user_id,

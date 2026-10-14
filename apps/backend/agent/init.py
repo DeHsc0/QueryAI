@@ -15,13 +15,13 @@ from langchain.agents.middleware import ToolCallLimitMiddleware , TodoListMiddle
 from typing import Any 
 from langgraph.checkpoint.redis import AsyncRedisSaver , RedisSaver
 from .context import Context
-from .middleware import add_dense_schema 
+from .middleware import add_dense_schema , disable_parallel_tool_calls 
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
 def get_llm (model_name : str = "deepseek-v4-pro") -> ChatDeepSeek :
 
-    model = ChatDeepSeek( model=model_name , api_key=DEEPSEEK_API_KEY , base_url="https://api.deepseek.com")
+    model = ChatDeepSeek( model=model_name , api_key=DEEPSEEK_API_KEY , base_url="https://api.deepseek.com" )
 
     return model
 
@@ -33,7 +33,7 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
 
     agent = create_agent(
 
-        model.bind_tools( tools , parallel_tool_calls=False), 
+        model, 
         tools=tools,
         checkpointer=checkpointer,
         context_schema=Context,
@@ -137,7 +137,8 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         middleware=[ 
             add_dense_schema, 
             ToolCallLimitMiddleware( tool_name="retrieve_context", run_limit=2 ),
-            ToolCallLimitMiddleware( tool_name="run_sql" , run_limit=2) 
+            ToolCallLimitMiddleware( tool_name="run_sql" , run_limit=2),
+            disable_parallel_tool_calls
             ]
 
     )
