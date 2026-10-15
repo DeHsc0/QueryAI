@@ -7,8 +7,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-elevated: var(--elevated);
+  --color-violet-soft: var(--violet-soft);
+  --color-accent-teal: var(--accent-bright);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -84,37 +87,42 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.1708 0.0103 285.25);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* QueryAI dark-first palette: near-black teal-tinted charcoal, brand teal
+     #00D4A0 ≈ oklch(0.77 0.146 167) committed as primary. */
+  --background: oklch(0.165 0.008 195);
+  --foreground: oklch(0.955 0.004 195);
+  --elevated: oklch(0.225 0.011 195);
+  --violet-soft: oklch(0.72 0.1 295);
+  --accent-bright: oklch(0.8 0.13 167);
+  --card: oklch(0.205 0.01 195);
+  --card-foreground: oklch(0.955 0.004 195);
+  --popover: oklch(0.225 0.011 195);
+  --popover-foreground: oklch(0.955 0.004 195);
+  --primary: oklch(0.77 0.146 167);
+  --primary-foreground: oklch(0.15 0.01 195);
+  --secondary: oklch(0.26 0.012 195);
+  --secondary-foreground: oklch(0.93 0.006 195);
+  --muted: oklch(0.24 0.01 195);
+  --muted-foreground: oklch(0.72 0.014 195);
+  --accent: oklch(0.26 0.014 195);
+  --accent-foreground: oklch(0.955 0.004 195);
+  --destructive: oklch(0.65 0.19 25);
+  --border: oklch(0.985 0 0 / 9%);
+  --input: oklch(0.985 0 0 / 14%);
+  --ring: oklch(0.77 0.146 167 / 60%);
+  --chart-1: oklch(0.77 0.146 167);
+  --chart-2: oklch(0.73 0.08 190);
+  --chart-3: oklch(0.62 0.06 240);
+  --chart-4: oklch(0.68 0.1 90);
+  --chart-5: oklch(0.7 0.1 295);
+  --sidebar: oklch(0.19 0.01 195);
+  --sidebar-foreground: oklch(0.955 0.004 195);
+  --sidebar-primary: oklch(0.77 0.146 167);
+  --sidebar-primary-foreground: oklch(0.15 0.01 195);
+  --sidebar-accent: oklch(0.26 0.012 195);
+  --sidebar-accent-foreground: oklch(0.955 0.004 195);
+  --sidebar-border: oklch(0.985 0 0 / 9%);
+  --sidebar-ring: oklch(0.77 0.146 167 / 60%);
 }
 
 @layer base {
@@ -126,5 +134,76 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* ── Landing utilities ─────────────────────────────── */
+
+/* Fading grid backdrop (decorative only) */
+.landing-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.985 0 0 / 4%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.985 0 0 / 4%) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%);
+}
+
+/* SQL syntax palette — fixed colors, valid on every dark surface */
+.sql-kw { color: oklch(0.82 0.13 167); }
+.sql-fn { color: oklch(0.76 0.1 295); }
+.sql-str { color: oklch(0.82 0.1 85); }
+.sql-num { color: oklch(0.82 0.1 85); }
+.sql-id { color: oklch(0.88 0.008 195); }
+.sql-op { color: oklch(0.62 0.014 195); }
+
+/* Scroll reveal — skipped entirely under reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity 0.6s cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Pipeline pulse — a single accent dot travelling the connector line */
+@keyframes pipeline-travel {
+  0% { left: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: calc(100% - 6px); opacity: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pipeline-pulse {
+    animation: pipeline-travel 2.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+}
+
+/* Demo caret / status dot */
+@keyframes demo-ping {
+  0% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.6); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 0.9; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .demo-ping {
+    animation: demo-ping 1.1s ease-in-out infinite;
+  }
+}
+
+/* Dialog entry */
+@keyframes dialog-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dialog-in {
+    animation: dialog-in 0.16s cubic-bezier(0.2, 0.7, 0.2, 1);
   }
 }
