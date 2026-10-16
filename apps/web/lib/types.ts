@@ -64,6 +64,10 @@ export interface Database {
 export interface Conversation {
   thread_id: string;
   title: string;
+  /** Owning database (used by the UI for per-database conversation lists). */
+  database_id?: string;
+  /** Creation timestamp (Real contract: conversations table created_at). */
+  created_at?: string;
 }
 
 export interface CreateConversationRequest {
@@ -80,6 +84,14 @@ export interface Turn {
   ai_response: string;
   sql_query: string[] | null;
   created_at: string;
+  /**
+   * Structured results per executed SQL index. The real backend currently
+   * persists only `sql_query`; structured result data arrives via tool
+   * results while streaming. Expected backend addition: persist per-query
+   * results so reopened conversations restore them (docs in Context.md derive
+   * results from run_sql tool output: JSON array of row objects).
+   */
+  results?: SqlResult[];
 }
 
 // Chat — match schemas.py Chat

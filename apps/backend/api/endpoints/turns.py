@@ -1,92 +1,74 @@
-from fastapi import APIRouter , Request , Depends 
+from fastapi import APIRouter, Depends, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from typing import Optional
-from sqlalchemy import  select 
+from sqlalchemy import select
 from sqlmodel import Session
-from db.models import Turns , Conversations
+from db.models import Conversations, Turns, UserDatabases
 from db.dependency import get_db
-from app_state import AppState
-from langchain_core.messages import  HumanMessage , AIMessage 
-from langgraph.checkpoint.redis import AsyncRedisSaver
 
 router = APIRouter()
 
-@router.get("/")
-async def get_conversations (req : Request, id : Optional[str] = None , thread_id : Optional[str]  = None,  session : Session =Depends(get_db)) :
+@router.get("/{db_id}/{conversation_id}")
+async def get_conversations(
+    req: Request,
+    db_id: str,
+    conversation_id: str,
+    session: Session = Depends(get_db),
+):
 
-    user_id : str = req.state.clerk.get("sub") 
+    user_id: str = req.state.clerk.get("sub")
 
-    if id is None or thread_id is None: 
-        return JSONResponse(content={
+    try:
 
-            "message" : "No id provided"
+        user_db = session.exec(
+            select(UserDatabases).where(
+                UserDatabases.id == db_id,
+                UserDatabases.user_clerk_id == user_id,
+            )
+        ).first()
 
-        } , status_code=301)
-    
-    state : AppState = req.app.state
+    except Exception as e: 
+        return JSONResponse(content={ "message" : "Unable to verify database access" , "success": False} , status_code=301)
 
-    checkpointer : AsyncRedisSaver = state.checkpointer
+    if not user_db:
+        return JSONResponse(
+            content={
+                "message": "User does not have access to this database.",
+                "success": False,
+            },
+            status_code=403,
+        )
 
-    config = {"configurable": { "thread_id": thread_id }}
+    try: 
 
-    t = await checkpointer.aget_tuple(config) 
+        conversation = session.exec(
+            select(Conversations).where(
+                Conversations.id == conversation_id,
+                Conversations.database_id == db_id,
+            )
+        ).first()
 
-    print(t)
+    except Exception as e: 
+        return JSONResponse(content={ "message" : "Unable to verify if the conversation exists or not" , "success": False} , status_code=301)
 
-    turns = []
+    if not conversation:
+        return JSONResponse(
+            content={"message": "Conversation does not exist", "success": False},
+            status_code=404,
+        )
 
-    if t:
-        messages = t.checkpoint.get("channel_values", {}).get("messages", [])
+    try: 
 
-        print("Messages :" , messages)
-        
-        i = 0
-        while i < len(messages):
-            msg = messages[i]
+        turns = session.exec(
+            select(Turns)
+            .where(Turns.conversation_id == str(conversation[0].id))
+            .order_by(Turns.created_at.desc(), Turns.id.desc())
+            .limit(5)
+        ).fetchall()
 
-            if isinstance( msg , HumanMessage): 
-                turn = {
+        turns_data = [turn[0].dict() for turn in turns]
 
-                    "user_query" : msg.content, 
-                    "ai_response" : None
+    except Exception as e : 
+        return JSONResponse(content={ "message" : "Unable to fetch turns", "success": False} , status_code=301)
 
-                }             
-
-            i += 1
-
-            if i < len(messages):
-
-                msg = messages[i]
-
-                if isinstance(msg , AIMessage): 
-
-                    turn["ai_response"] = msg.content
-                    i += 1
-
-            turns.append(turn)
-
-        print(turns)
-
-    elif len(turns) > 0:
-
-        return JSONResponse( content={
-
-            "Data" : turns
-
-        } , status_code=200)
-
-    else: 
-
-        # results = session.exec(
-        #     select(Conversations)
-        #     .where(
-
-        #         Conversations.id == thread_id, 
-        #         Conversations.database_id == id
-
-        #     )
-        # )
-
-        # print(results)
-
-        return JSONResponse(content={ "Data" : ""})
+    return JSONResponse(content=jsonable_encoder({"data": turns_data}), status_code=200)

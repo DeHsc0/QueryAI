@@ -125,6 +125,15 @@
   --sidebar-ring: oklch(0.77 0.146 167 / 60%);
 }
 
+/* Visually hide scrollbars everywhere while retaining scroll functionality */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

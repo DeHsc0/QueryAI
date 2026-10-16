@@ -21,17 +21,9 @@ load_dotenv()
 
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
-
-if not QDRANT_COLLECTION: 
-    raise ValueError("QDRANT_COLLECTION environment variable is not set")
 
 if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY environment variable is not set")
-
-if not OPENROUTER_API_KEY:
-    raise ValueError("OPENROUTER_API_KEY environment variable is not set")
 
 fernet = Fernet(ENCRYPTION_KEY)
 
@@ -166,59 +158,3 @@ def store_schema ( creds : Creds ):
         db_dense_schema = "".join(db_dense_schema)
 
     return schema , db_dense_schema
-
-
-def ingest_schema ( schema : List[str] , user_id : str , db_id : str ) :
-
-    client = get_qdrant_client()
-    
-    points = []
-    
-    for data in schema : 
-        
-        point = models.PointStruct(
-
-            id=str(uuid4()),
-            vector={
-
-
-                "dense" : models.Document(
-
-                    text=data,                                          
-                    model ="openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free",
-                    options ={
-
-                        "openrouter-api-key" : OPENROUTER_API_KEY,
-                        "dimensions" : 1024
-
-                    }  
-
-                ),
-                "sparse" : models.Document(
-
-                    text=data,
-                    model="qdrant/bm25"
-
-                )
-
-            }, 
-
-            payload={
-            
-                "tenant_id" : f"{user_id}__{db_id}",
-                "page_content" : data
-            
-            }
-
-        )
-
-        points.append(point)
-
-    client.upload_points(
-
-        collection_name=QDRANT_COLLECTION,
-        points=points,
-        wait=True
-
-    )
-

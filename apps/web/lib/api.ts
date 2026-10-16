@@ -17,6 +17,7 @@ import type {
   DatabaseSummary,
   RegisterDatabaseRequest,
   UpdateDatabaseRequest,
+  SqlResultRow,
 } from "./types";
 
 // ──────────────────────────────────────────
@@ -70,10 +71,39 @@ export const mockDatabases: Database[] = [
   },
 ];
 
-export const mockConversations: Conversation[] = [
-  { thread_id: "conv_1", title: "Sales by Region Analysis" },
-  { thread_id: "conv_2", title: "Customer Behavior Insights" },
-  { thread_id: "conv_3", title: "Product Performance Q1" },
+// ──────────────────────────────────────────
+//  Conversations + turns — mock-first stores
+//
+//  Real backend contracts:
+//    GET  /api/turns?thread_id= → saved turns for a conversation (sql_query is
+//        persisted; structured results currently only exist while streaming,
+//        see Turn.results for the expected backend addition)
+//    POST /api/conversation { database_id, query? } → creates a conversation
+//        (title generated with the LLM server-side)
+//    POST /api/chat SSE — kept in the streamChat function below.
+// ──────────────────────────────────────────
+
+const hoursAgo = (h: number): string => new Date(Date.now() - h * 3_600_000).toISOString();
+
+const seedConversations: Conversation[] = [
+  {
+    thread_id: "conv_1",
+    title: "Customer spend analysis",
+    database_id: "db_02",
+    created_at: hoursAgo(3),
+  },
+  {
+    thread_id: "conv_2",
+    title: "Signal strength by observatory",
+    database_id: "db_01",
+    created_at: hoursAgo(27),
+  },
+  {
+    thread_id: "conv_3",
+    title: "MRR growth trend",
+    database_id: "db_03",
+    created_at: hoursAgo(120),
+  },
 ];
 
 export const mockTurns: Turn[] = [
@@ -82,63 +112,120 @@ export const mockTurns: Turn[] = [
     conversation_id: "conv_1",
     user_query: "Show me the top 5 customers by total spending this month",
     ai_response:
-      "Based on the sales data, here are the top 5 customers by total spending this month. Alice Johnson leads with $15,420.50, followed by Bob Smith at $12,300.00. The results show a healthy distribution of spending across your customer base.",
+      "Alice Johnson is your top customer this month with $15,420.50 in spending. The top 5 carry a large share of monthly revenue, so the distribution is healthy but weighted toward the head of the list.",
     sql_query: [
-      "SELECT c.name AS customer_name, SUM(o.total) AS total_spent FROM customers c JOIN orders o ON c.id = o.customer_id WHERE DATE_TRUNC('month', o.created_at) = DATE_TRUNC('month', CURRENT_DATE) GROUP BY c.name ORDER BY total_spent DESC LIMIT 5",
+      "SELECT c.name AS customer_name, SUM(o.total) AS total_spent\nFROM customers c\nJOIN orders o ON o.customer_id = c.id\nWHERE o.created_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)\nGROUP BY c.name\nORDER BY total_spent DESC\nLIMIT 5;",
     ],
-    created_at: "2025-02-20T16:45:00Z",
+    results: [
+      {
+        columns: ["customer_name", "total_spent"],
+        rows: [
+          { customer_name: "Alice Johnson", total_spent: 15420.5 },
+          { customer_name: "Bob Smith", total_spent: 12300.0 },
+          { customer_name: "Carol Lee", total_spent: 8750.75 },
+          { customer_name: "David Kim", total_spent: 6200.0 },
+          { customer_name: "Eva Martinez", total_spent: 4800.25 },
+        ],
+      },
+    ],
+    created_at: hoursAgo(3),
   },
   {
     id: "turn_2",
     conversation_id: "conv_1",
-    user_query: "What's the month-over-month revenue trend?",
+    user_query: "And how is revenue trending month over month?",
     ai_response:
-      "Revenue grew 15% month-over-month. January: $45,200. February: $52,000.",
+      "Revenue grew every month this quarter: $45,200 (Jan), $52,000 (Feb), $61,400 (Mar). The March figure is 15% up on February, and the three-month total is $158,600.",
     sql_query: [
-      "SELECT DATE_TRUNC('month', order_date) AS month, SUM(total) AS revenue FROM orders GROUP BY month ORDER BY month",
+      "SELECT DATE_FORMAT(created_at, '%Y-%m') AS month, SUM(total) AS revenue\nFROM orders\nGROUP BY month\nORDER BY month;",
     ],
-    created_at: "2025-02-20T16:47:00Z",
+    results: [
+      {
+        columns: ["month", "revenue"],
+        rows: [
+          { month: "2025-01", revenue: 45200 },
+          { month: "2025-02", revenue: 52000 },
+          { month: "2025-03", revenue: 61400 },
+        ],
+      },
+    ],
+    created_at: hoursAgo(2.5),
   },
 ];
 
-// Simulated SSE stream events showing a full question→SQL→table→insight cycle
-const mockStreamEvents: ChatStreamEvent[] = [
-  // Agent decides to call run_sql
-  {
-    type: "tool_call",
-    tool_name: "run_sql",
-    call_id: "call_sql_1",
-    args: {
-      query:
-        "SELECT customer_name, total_spent FROM (\n  SELECT c.name AS customer_name, SUM(o.total) AS total_spent\n  FROM customers c\n  JOIN orders o ON c.id = o.customer_id\n  WHERE o.created_at >= DATE_TRUNC('month', CURRENT_DATE)\n  GROUP BY c.name\n  ORDER BY total_spent DESC\n  LIMIT 5\n) t",
+const turnsStoreSeed: Record<string, Turn[]> = {
+  conv_1: mockTurns,
+  conv_2: [
+    {
+      id: "turn_3",
+      conversation_id: "conv_2",
+      user_query: "Which observatory detected the strongest signals?",
+      ai_response:
+        "Mauna Kea logs the strongest detection of the period at SNR 18.4 and also leads raw detection volume with 214 readings, so its lead is not a one-off.",
+      sql_query: [
+        "SELECT ob.name AS observatory, MAX(s.snr_ratio) AS peak_snr, COUNT(s.id) AS detections\nFROM signals s\nJOIN observatories ob ON ob.id = s.observatory_id\nGROUP BY ob.name\nORDER BY peak_snr DESC\nLIMIT 4;",
+      ],
+      results: [
+        {
+          columns: ["observatory", "peak_snr", "detections"],
+          rows: [
+            { observatory: "Mauna Kea", peak_snr: 18.4, detections: 214 },
+            { observatory: "La Palma", peak_snr: 15.2, detections: 167 },
+            { observatory: "Paranal", peak_snr: 12.9, detections: 189 },
+            { observatory: "Siding Spring", peak_snr: 9.6, detections: 143 },
+          ],
+        },
+      ],
+      created_at: hoursAgo(27),
     },
-  },
-  // Tool returns JSON array of row objects
-  {
-    type: "tool_result",
-    call_id: "call_sql_1",
-    output: JSON.stringify([
-      { customer_name: "Alice Johnson", total_spent: 15420.5 },
-      { customer_name: "Bob Smith", total_spent: 12300.0 },
-      { customer_name: "Carol Lee", total_spent: 8750.75 },
-      { customer_name: "David Kim", total_spent: 6200.0 },
-      { customer_name: "Eva Martinez", total_spent: 4800.25 },
-    ]),
-  },
-  // Token-by-token agent output (final answer)
-  { type: "agent_output", content: "Based on my analysis of your sales database," },
-  { type: "agent_output", content: " here are the top 5 customers by total spending this month:\n\n" },
-  {
-    type: "agent_output",
-    content:
-      "| Customer Name | Total Spent |\n| --- | --- |\n| Alice Johnson | $15,420.50 |\n| Bob Smith | $12,300.00 |\n| Carol Lee | $8,750.75 |\n| David Kim | $6,200.00 |\n| Eva Martinez | $4,800.25 |\n\n",
-  },
-  {
-    type: "agent_output",
-    content:
-      "Alice Johnson is your top customer this month with $15,420.50 in spending. The top 5 customers account for a significant portion of monthly revenue.",
-  },
-];
+  ],
+  conv_3: [
+    {
+      id: "turn_4",
+      conversation_id: "conv_3",
+      user_query: "How has MRR trended over the last six months?",
+      ai_response:
+        "MRR grew 38% over six months, from $28.4k in April to $38.6k in September, with no down month in the series and a near-linear curve.",
+      sql_query: [
+        "SELECT DATE_TRUNC('month', recorded_at) AS month, value\nFROM metrics\nWHERE name = 'mrr' AND recorded_at >= NOW() - INTERVAL '6 months'\nORDER BY month;",
+      ],
+      results: [
+        {
+          columns: ["month", "value"],
+          rows: [
+            { month: "2025-04-01", value: 28400 },
+            { month: "2025-05-01", value: 30100 },
+            { month: "2025-06-01", value: 31850 },
+            { month: "2025-07-01", value: 33900 },
+            { month: "2025-08-01", value: 36100 },
+            { month: "2025-09-01", value: 38600 },
+          ],
+        },
+      ],
+      created_at: hoursAgo(120),
+    },
+  ],
+};
+
+/** Per-session conversation + turn state. Never holds credentials. */
+let conversationStore: Conversation[] = seedConversations.map((c) => ({ ...c }));
+const turnsStore: Map<string, Turn[]> = new Map(
+  Object.entries(turnsStoreSeed).map(([id, list]) => [id, list.map((t) => ({ ...t }))]),
+);
+
+export async function listConversations(dbId?: string): Promise<Conversation[]> {
+  // Real: const resp = await api.get("/api/conversation"); // filtered per database
+  await delay(450);
+  const filtered = dbId ? conversationStore.filter((c) => (c.database_id ?? "unknown") === dbId) : conversationStore;
+  return [...filtered].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+}
+
+export async function getTurns(threadId: string): Promise<Turn[]> {
+  // Real: const resp = await api.get("/api/turns", { params: { thread_id: threadId } });
+  //       return resp.data.Data || [];
+  await delay(500);
+  return [...(turnsStore.get(threadId) ?? [])];
+}
 
 // ──────────────────────────────────────────
 //  Utility
@@ -171,56 +258,146 @@ export async function createConversation(
 ): Promise<Conversation> {
   // Real: const resp = await api.post("/api/conversation", data);
   //       return resp.data;
-  const title = data.query ? generateTitle(data.query) : "New Conversation";
-  return {
+  await delay(500);
+  const title = data.query ? generateTitle(data.query) : "New conversation";
+  const conversation: Conversation = {
     thread_id: crypto.randomUUID(),
     title,
+    database_id: data.database_id,
+    created_at: new Date().toISOString(),
+  };
+  conversationStore = [conversation, ...conversationStore];
+  turnsStore.set(conversation.thread_id, []);
+  return conversation;
+}
+
+// ──────────────────────────────────────────
+//  Streaming chat — mock events with the same shape the SSE bridge will
+//  produce for POST /api/chat (tool_call / tool_result / agent_output / done)
+// ──────────────────────────────────────────
+
+const revenueRows = () => [
+  { product: "Meridian Desk Lamp", revenue: 4820, orders: 96 },
+  { product: "Fieldline Backpack", revenue: 3690, orders: 74 },
+  { product: "Halden Mug Set", revenue: 3156, orders: 118 },
+];
+
+const growthRows = () => [
+  { month: "2025-05", revenue: 52000 },
+  { month: "2025-06", revenue: 56400 },
+  { month: "2025-07", revenue: 60500 },
+  { month: "2025-08", revenue: 65200 },
+  { month: "2025-09", revenue: 68900 },
+];
+
+const customerRows = () => [
+  { customer: "Alice Johnson", orders: 18, total: 15420.5 },
+  { customer: "Bob Smith", orders: 14, total: 12300.0 },
+  { customer: "Carol Lee", orders: 9, total: 8750.75 },
+];
+
+interface StreamScenario {
+  sql: string;
+  rows: () => Record<string, unknown>[];
+  answer: string;
+}
+
+function scenarioFor(query: string): StreamScenario {
+  const q = query.toLowerCase();
+  if (q.includes("customer")) {
+    return {
+      sql: "SELECT c.name AS customer, COUNT(*) AS orders, SUM(o.total) AS total\nFROM customers c\nJOIN orders o ON o.customer_id = c.id\nGROUP BY c.name\nORDER BY orders DESC\nLIMIT 5;",
+      rows: customerRows,
+      answer:
+        "Alice Johnson places the most orders (18, $15,420.50 lifetime total), ahead of Bob Smith (14) and Carol Lee (9). Your top three customers hold a significant share of order volume, so retention programs focused on this segment have real leverage.",
+    };
+  }
+  if (q.includes("trend") || q.includes("growth") || q.includes("monthly") || q.includes("month")) {
+    return {
+      sql: "SELECT DATE_FORMAT(o.created_at, '%Y-%m') AS month, SUM(o.total) AS revenue\nFROM orders o\nGROUP BY month\nORDER BY month;",
+      rows: growthRows,
+      answer:
+        "Monthly revenue climbs steadily: $52.0k (May), $56.4k (Jun), $60.5k (Jul), $65.2k (Aug), $68.9k (Sep). That is a 32% gain over five months with no down month, so growth is structural rather than a one-off spike.",
+    };
+  }
+  if (q.includes("products") || q.includes("product") || q.includes("revenue")) {
+    return {
+      sql: "SELECT p.name AS product, SUM(o.total) AS revenue, COUNT(*) AS orders\nFROM orders o\nJOIN products p ON p.id = o.product_id\nWHERE o.created_at >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)\nGROUP BY p.name\nORDER BY revenue DESC\nLIMIT 5;",
+      rows: revenueRows,
+      answer:
+        "The Meridian Desk Lamp leads the quarter at $4,820 across 96 orders. Home-office goods dominate the top five: the desk lamp, backpack, and desk mat together carry most of the range, so a bundle across them should test well.",
+    };
+  }
+  return {
+    sql: "SELECT table_name, n_rows\nFROM sample_table_stats\nWHERE schema = 'YOUR_SCHEMA_NAME'\nORDER BY n_rows DESC\nLIMIT 3;",
+    rows: () => [
+      { table_name: "orders", n_rows: 1240 },
+      { table_name: "customers", n_rows: 310 },
+      { table_name: "products", n_rows: 24 },
+    ],
+    answer:
+      "This dataset is compact: 1,240 orders, 310 customers, and 24 products. Every order relates to one customer and one product at a join depth of two, so aggregated answers stay fast and the dimensional tables carry most of the analytical value.",
   };
 }
 
-export async function getTurns(_threadId: string): Promise<Turn[]> {
-  // Real: const resp = await api.get("/api/turns", {
-  //         params: { thread_id: threadId },
-  //       });
-  //       return resp.data.Data || [];
-  return mockTurns;
-}
-
 export async function* streamChat(
-  _request: ChatRequest,
+  request: ChatRequest,
 ): AsyncGenerator<ChatStreamEvent, void, void> {
-  // Real SSE implementation:
+  // Real SSE bridge for POST /api/chat:
   // const resp = await fetch(`${BACKEND_URL}/api/chat`, {
   //   method: "POST",
   //   headers: { "Content-Type": "application/json" },
   //   credentials: "include",
   //   body: JSON.stringify(request),
   // });
-  // const reader = resp.body?.getReader();
-  // const decoder = new TextDecoder();
-  // while (true) {
-  //   const { done, value } = await reader.read();
-  //   if (done) break;
-  //   const text = decoder.decode(value, { stream: true });
-  //   for (const line of text.split("\n\n")) {
-  //     if (line.startsWith("data: ")) {
-  //       const event = JSON.parse(line.slice(6));
-  //       yield event;
-  //     }
-  //   }
-  // }
+  // ... read `data: ` SSE lines and yield ChatStreamEvent objects …
   // yield { type: "done" };
 
-  // Simulated streaming with sample data
-  for (const event of mockStreamEvents) {
-    if (event.type === "tool_call" || event.type === "tool_result") {
-      await delay(400);
-    } else if (event.type === "agent_output") {
-      await delay(30); // token-level pacing
-    }
-    yield event;
+  const scenario = scenarioFor(request.query);
+  const callRetrieve = "call_retrieve";
+  const callSql = "call_sql";
+
+  await delay(400);
+  yield { type: "tool_call", tool_name: "retrieve_context", call_id: callRetrieve, args: {} };
+  await delay(700);
+  yield {
+    type: "tool_result",
+    call_id: callRetrieve,
+    output: JSON.stringify({ ok: true, tables: 3 }),
+  };
+  await delay(550);
+  yield { type: "tool_call", tool_name: "run_sql", call_id: callSql, args: { query: scenario.sql } };
+  await delay(750);
+  yield { type: "tool_result", call_id: callSql, output: JSON.stringify(scenario.rows()) };
+
+  const chunks = scenario.answer.match(/\S+\s*/g) ?? [];
+  for (const chunk of chunks) {
+    await delay(55);
+    yield { type: "agent_output", content: chunk };
   }
-  await delay(200);
+  await delay(150);
+
+  // Persist the finished turn so reopening the conversation restores it
+  // (mock stand-in for the Celery-backed insert_chats_in_db task).
+  if (request.conversation_id) {
+    const turn: Turn = {
+      id: crypto.randomUUID(),
+      conversation_id: request.conversation_id,
+      user_query: request.query,
+      ai_response: scenario.answer,
+      sql_query: [scenario.sql],
+      results: [
+        {
+          columns: Object.keys(scenario.rows()[0] ?? {}),
+          rows: scenario.rows() as SqlResultRow[],
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+    const list = turnsStore.get(request.conversation_id) ?? [];
+    turnsStore.set(request.conversation_id, [...list, turn]);
+  }
+
   yield { type: "done" };
 }
 
@@ -234,7 +411,8 @@ function generateTitle(query: string): string {
   if (q.includes("customer")) return "Customer Insights";
   if (q.includes("product")) return "Product Performance";
   if (q.includes("trend")) return "Trend Analysis";
-  return "New Conversation";
+  const firstWords = query.trim().split(/\s+/).slice(0, 5).join(" ");
+  return firstWords.length >= 60 ? firstWords.slice(0, 57) + "…" : firstWords || "New conversation";
 }
 
 // ──────────────────────────────────────────

@@ -1,103 +1,15 @@
-"use client"
-import axios from "axios";
-import {  useEffect, useState } from "react";
+import type { Metadata } from 'next'
+import { ChatWorkspace } from '@/components/chat/chat-workspace'
 
-export default function Database ({ params } : { params : { databaseId : string } } ) {
+export const metadata: Metadata = {
+  title: 'Chat — QueryAI',
+}
 
-    const [ chatInput , setChatInput ] = useState<string>("")
-
-    const [ databaseId , setDatabaseId] = useState<string>("")
-
-    async function getParams (){
-
-        const { databaseId } = await params
-        setDatabaseId(databaseId)
-
-    }
-
-    useEffect(() => {
-
-        getParams()
-
-    } , []) 
-
-    const threadId =  crypto.randomUUID();
-
-    async function chat () {
-
-        const result = await axios.post("http://localhost:8000/api/chat/" , {
-            
-            conversation_id : "ff8d2f75-5b4d-46c6-9a1d-61456040a02b",
-            query : chatInput,
-            db_id : databaseId  
-
-        } , { withCredentials : true })
-
-    }
-
-    async function getCon () {
-
-        const result = await axios.get(
-            "http://localhost:8000/api/turns",
-            {
-            params: {
-                id: "3ff2bd38-81fd-4b6c-8b0e-cc50c19a6232",
-                thread_id: "11ccc471-6403-4229-bf82-d73ede25e4b6",
-            },
-            withCredentials: true,
-            }
-        );
-
-    }
-    
-    // async function getCon () {
-
-    //     const result = await axios.get(
-    //         "http://localhost:8000/api/database",
-    //         {
-    //             withCredentials: true,
-    //         }
-    //     );
-
-    //     console.log(result)
-
-    // }
-
-    async function testRunQueryTool () {
-
-        const result = axios.get("http://localhost:8000/api/test" , { withCredentials : true })
-
-    }
-
-    return (
-
-        <div className="flex gap-3 my-4 mx-4">
-
-            <input type="text" className="px-4 py-3 border-white rounded-lg border-2" onChange={(e) => {
-
-                setChatInput(e.currentTarget.value)    
-
-            }} />
-
-            <button className="px-4 py-3 border-white rounded-lg border-2 " onClick={chat}>
-
-                Send
-
-            </button>
-            <button className="px-4 py-3 border-white rounded-lg border-2 " onClick={getCon}>
-
-                Get COnversation
-
-            </button>
-            <button className="px-4 py-3 border-white rounded-lg border-2 " onClick={testRunQueryTool}>
-
-                Test Run memory
-
-            </button>
-
-        </div>
-
-    )
-
-
+export default async function DatabaseChatPage({
+  params,
+}: {
+  params: Promise<{ databaseId: string }>
+}) {
+  const { databaseId } = await params
+  return <ChatWorkspace databaseId={databaseId} />
 }

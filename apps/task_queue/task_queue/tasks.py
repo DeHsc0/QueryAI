@@ -8,7 +8,11 @@ from sqlalchemy import select
 from typing import Optional , List , Any 
 from langchain.messages import AnyMessage
 import json 
+import os 
+from uuid import uuid4
 from agent.memory.long import mem0
+from lib.helpers import get_qdrant_client
+from qdrant_client import models 
 
 class Turn_data(BaseModel):
     conversation_id : str
@@ -17,34 +21,42 @@ class Turn_data(BaseModel):
     ai_response  : str
     sql_query : Any 
 
+class Schema_Data(BaseModel): 
+    schema_str : List[str]
+    user_id : str
+    db_id : str 
 
 
 @app.task(bind=True , max_retries=3 , default_retry_delay=120 )
 def memory_write(self , raw_data : str): 
 
-    data = json.loads(raw_data)
+    try: 
 
-    print("\n\n\n\n\n\n data :" , data , "\n\n\n\n\n\n\n")
+        data = json.loads(raw_data)
 
-    conversation_id = data.get("conversation_id")
-    
-    db_id = data.get("db_id")
+        conversation_id = data.get("conversation_id")
+        
+        db_id = data.get("db_id")
 
-    user_id = data.get("user_id")
+        user_id = data.get("user_id")
 
-    raw_memory = json.loads(data.get("memory"))
+        raw_memory = json.loads(data.get("memory"))
 
-    if user_id and db_id and conversation_id and raw_memory :
+        if user_id and db_id and conversation_id and raw_memory :
 
-        result = mem0.add( messages=[{ "role" : "user" , "content" : raw_memory["memory"]}] , user_id=data["user_id"] , run_id=conversation_id , app_id=db_id , metadata={"category": raw_memory["category"], "confidence": raw_memory["confidence_score"]} , infer=False)
+            result = mem0.add( messages=[{ "role" : "user" , "content" : raw_memory["memory"]}] , user_id=data["user_id"] , run_id=conversation_id , app_id=db_id , metadata={"category": raw_memory["category"], "confidence": raw_memory["confidence_score"]} , infer=False)
 
-    return data
+        else: 
+            raise ValueError("Missing required data")
+
+    except Exception as exc:
+        raise self.retry(exc=exc)
 
 
 @app.task( bind=True , max_retries=3 , default_retry_delay=120 )
 def insert_chats_in_db ( self , raw_data : Turn_data ):
 
-    try: 
+    try : 
 
         data = Turn_data.model_validate(raw_data)
 
@@ -64,5 +76,75 @@ def insert_chats_in_db ( self , raw_data : Turn_data ):
             db.refresh(turn)
 
     except Exception as exc:
-        print("\n\n\n\n\n\n\n\n\n" , "It Failed" , "\n\n\n\n\n\n\n\n\n" ) 
-        raise self.retry(exc=exc , countdown=60 )
+        raise self.retry(exc=exc)
+
+@app.task( bind=True , max_retries=3 , default_retry_delay=120 )
+def ingest_schema (self , raw_data : str) :
+
+    try:
+
+        data = Schema_Data.model_validate_json(raw_data)
+
+        OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+        QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
+
+        if not QDRANT_COLLECTION: 
+            raise ValueError("QDRANT_COLLECTION environment variable is not set")
+
+        if not OPENROUTER_API_KEY:
+            raise ValueError("OPENROUTER_API_KEY environment variable is not set")
+
+        client = get_qdrant_client()
+        
+        points = []
+        
+        for schema_data in data.schema_str : 
+            
+            point = models.PointStruct(
+
+                id=str(uuid4()),
+                vector={
+
+
+                    "dense" : models.Document(
+
+                        text=schema_data,                                          
+                        model ="openrouter/nvidia/llama-nemotron-embed-vl-1b-v2:free",
+                        options ={
+
+                            "openrouter-api-key" : OPENROUTER_API_KEY,
+                            "dimensions" : 1024
+
+                        }  
+
+                    ),
+                    "sparse" : models.Document(
+
+                        text=schema_data,
+                        model="qdrant/bm25"
+
+                    )
+
+                }, 
+
+                payload={
+                
+                    "tenant_id" : f"{data.user_id}__{data.db_id}",
+                    "page_content" : schema_data
+                
+                }
+
+            )
+
+            points.append(point)
+
+        client.upload_points(
+
+            collection_name=QDRANT_COLLECTION,
+            points=points,
+            wait=True
+
+        )
+    except Exception as exc:
+        raise self.retry(exc=exc)
+

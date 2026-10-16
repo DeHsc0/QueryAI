@@ -162,7 +162,7 @@ export function DatabaseOverview() {
     <div className="pb-4">
       {/* header */}
       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-        Workspace <span className="text-muted-foreground/70">/</span>{" "}
+        Workspace <span className="text-muted-foreground">/</span>{" "}
         <span className="text-accent-bright">Databases</span>
       </p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
