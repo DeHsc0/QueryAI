@@ -43,7 +43,9 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
     raw_db_data = redis.json().get(f"db_data:{user_id}:{data.db_id}")
 
-    db_data = json.loads(raw_db_data) if raw_db_data else None 
+    print("\n\n\n\n\n\n\n\n\n\n" , raw_db_data , "\n\n\n\n\n\n\n\n\n\n")
+
+    db_data = json.loads(raw_db_data) if isinstance(raw_db_data , str) else raw_db_data      
 
     user_prefs = None 
 
@@ -75,7 +77,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
             redis.expire(f"db_data:{user_id}:{data.db_id}" , 60 * 60 * 2)
 
         except Exception as e:
-            return JSONResponse(content={"message" : f"{e}" , "success" : False } , status_code=500)
+            return JSONResponse(content={"message" : str(e) , "success" : False } , status_code=500)
 
     new_convo_id = None
 
@@ -132,7 +134,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
     
             "configurable" : {
     
-                "max_tokens" : 40
+                "max_tokens" : 200
     
             }
     
@@ -192,7 +194,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
         cached_user_prefs = redis.json().get(f"user_prefs:{user_id}:{data.db_id}:{data.conversation_id}")
 
-        user_prefs = json.loads(cached_user_prefs) if cached_user_prefs else None 
+        user_prefs = json.loads(cached_user_prefs) if isinstance(cached_user_prefs , str) else cached_user_prefs or None
 
         if not cached_user_prefs :
 
@@ -284,7 +286,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
         
     except Exception as e : 
 
-        return JSONResponse( content={ "message" : e , "success" : False } , status_code=500 )
+        return JSONResponse( content={ "message" : str(e) , "success" : False } , status_code=500 )
 
     print( "\n\n\n" , agent_output , "\n\n\n" )
 

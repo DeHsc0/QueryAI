@@ -48,6 +48,9 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
   // run tokens: bumping invalidates any in-flight stream loop
   const runIdRef = useRef(0)
   const activeIdRef = useRef<string | null>(null)
+  // ids the backend itself issued (restored conversation list); locally
+  // created conversations are absent here, so their requests send null
+  const backendConversationIdsRef = useRef<Set<string>>(new Set())
   const lastSubmittedRef = useRef<string | null>(null)
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -76,7 +79,9 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
           setDbLoading(false)
         }
         try {
-          setConversations((await listConversations(databaseId)).map(toSidebarItem))
+          const loaded = await listConversations(databaseId)
+          backendConversationIdsRef.current = new Set(loaded.map((c) => c.thread_id))
+          setConversations(loaded.map(toSidebarItem))
         } catch {
           setConversations([])
         }
@@ -119,7 +124,7 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
       setMessages([])
       setLoadingHistory(true)
       try {
-        const turns = await getTurns(id)
+        const turns = await getTurns(databaseId, id)
         if (activeIdRef.current !== id) return // user moved on while loading
         setMessages(turns.flatMap(turnToMessages))
       } catch {
@@ -128,7 +133,7 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
         setLoadingHistory(false)
       }
     },
-    [bumpRun]
+    [bumpRun, databaseId]
   )
 
   const newChat = useCallback(() => {
@@ -160,7 +165,18 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
       const myRun = bumpRun()
       lastSubmittedRef.current = text
 
-      // no persistent conversation exists yet: create one on first send
+      // The backend request only carries an id for a conversation the
+      // backend itself created (restored via its list). Fresh chats and
+      // locally-created conversations send conversation_id: null — the
+      // backend creates its own record until response handling returns ids.
+      const activeConvId = activeIdRef.current
+      const requestConversationId =
+        activeConvId && backendConversationIdsRef.current.has(activeConvId)
+          ? activeConvId
+          : null
+
+      // no persistent conversation exists yet: create a local one for the
+      // sidebar. The backend request above intentionally doesn't use this id.
       let convId = activeIdRef.current
       if (!convId) {
         const conversation = await createConversation({ database_id: db.id, query: text })
@@ -199,11 +215,15 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
       setComposer("")
 
       try {
-        for await (const event of streamChat({
-          query: text,
-          conversation_id: convId,
-          db_id: db.id,
-        })) {
+        for await (const event of streamChat(
+          {
+            query: text,
+            conversation_id: requestConversationId,
+            db_id: db.id,
+          },
+          // local id: keys the mock turn store so in-session history restores
+          convId,
+        )) {
           if (runIdRef.current !== myRun || activeIdRef.current !== convId) {
             return // abandoned: new chat or conversation switch mid-stream
           }
@@ -234,10 +254,19 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
     return q ? conversations.filter((c) => c.title.toLowerCase().includes(q)) : conversations
   }, [conversations, sidebarQuery])
 
-  const activeTitle =
-    conversations.find((c) => c.id === activeId)?.title ?? (activeId ? "Conversation" : "New chat")
+  const conversationById = useMemo(
+    () => new Map(conversations.map((c) => [c.id, c.title])),
+    [conversations]
+  )
+  const activeTitle = useMemo(
+    () => conversationById.get(activeId ?? "") ?? (activeId ? "Conversation" : "New chat"),
+    [conversationById, activeId]
+  )
 
-  const streamingNow = messages.some((m) => m.streaming)
+  const streamingNow = useMemo(
+    () => messages.some((m) => m.streaming),
+    [messages]
+  )
 
   /* ── no database registered for this workspace ─────────────────── */
 

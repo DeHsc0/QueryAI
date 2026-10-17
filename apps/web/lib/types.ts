@@ -41,24 +41,6 @@ export interface Credentials {
   database: string;
 }
 
-export interface CreateDatabaseRequest {
-  database_name: string;
-  description?: string;
-  creds: Credentials;
-}
-
-export interface Database {
-  id: string;
-  user_clerk_id: string;
-  encrypted_creds: string;
-  database_name: string;
-  database_soft: DatabaseType;
-  description: string;
-  dense_schema: string;
-  created_at: string;
-  updated_at: string;
-}
-
 // Conversation types — match conversation.py
 
 export interface Conversation {
@@ -98,15 +80,14 @@ export interface Turn {
 
 export interface ChatRequest {
   query: string;
-  conversation_id?: string;
+  /** null for a fresh chat: the backend creates the conversation itself. */
+  conversation_id?: string | null;
   db_id: string;
 }
 
 // SSE streaming event types — what the frontend will receive from /api/chat
 // The backend tracks: tool calls (SQL queries), tool results (JSON arrays),
 // and agent output (token-by-token) — emitted as SSE events
-
-export type StreamEventType = "tool_call" | "tool_result" | "agent_output" | "done";
 
 export interface ToolCallEvent {
   type: "tool_call";

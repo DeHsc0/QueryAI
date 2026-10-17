@@ -7,11 +7,12 @@
       }
     ],
     "paths": {
-
+   
       "@/*" : ["./*"]
-
+   
     },
-    "strictNullChecks": true
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": false
   },
   "include": [
     "**/*.ts",

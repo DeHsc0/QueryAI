@@ -5,6 +5,11 @@ import { ArrowRight, Check, CircleAlert, Eye, EyeOff, Loader2, PartyPopper } fro
 import type { DatabaseType, DatabaseSummary, RegisterDatabaseRequest } from "@/lib/types"
 import { VendorIcon } from "@/components/shared/sql-code"
 import { registerDatabase } from "@/lib/api"
+import {
+  registrationFormErrors,
+  registrationFormSchema,
+  type RegistrationFormErrors,
+} from "@/lib/schemas"
 import { getVendor, vendors } from "./vendor"
 import { SetupGuide } from "./setup-guide"
 import { Dialog } from "./dialog"
@@ -23,7 +28,7 @@ interface FormState {
   password: string
 }
 
-type Errors = Partial<Record<"databaseName" | "host" | "port" | "database" | "username" | "password", string>>
+type Errors = RegistrationFormErrors
 
 const blankForm: FormState = {
   databaseName: "",
@@ -35,20 +40,10 @@ const blankForm: FormState = {
   password: "",
 }
 
-function validate(form: FormState): Errors {
-  const errors: Errors = {}
-  if (!/^[a-z0-9_]+$/.test(form.databaseName)) {
-    errors.databaseName = "Lowercase letters, numbers, and underscores only."
-  }
-  if (!form.host.trim()) errors.host = "Host is required."
-  const port = Number(form.port)
-  if (!form.port.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {
-    errors.port = "Port must be an integer between 1 and 65535."
-  }
-  if (!form.database.trim()) errors.database = "Database name is required."
-  if (!form.username.trim()) errors.username = "Username is required."
-  if (!form.password) errors.password = "Password is required."
-  return errors
+/** Field errors straight from the shared zod schema (mirrors the backend contract). */
+function computeErrors(form: FormState): Errors {
+  const result = registrationFormSchema.safeParse(form)
+  return result.success ? {} : registrationFormErrors(result.error)
 }
 
 /**
@@ -77,7 +72,7 @@ export function RegisterDatabaseDialog({
 
   const setField = (key: keyof FormState, value: string) => {
     setForm((f) => ({ ...f, [key]: value }))
-    if (touchedSubmit) setErrors(validate({ ...form, [key]: value }))
+    if (touchedSubmit) setErrors(computeErrors({ ...form, [key]: value }))
   }
 
   const selectVendor = (next: DatabaseType) => {
@@ -85,12 +80,12 @@ export function RegisterDatabaseDialog({
     setVendor(next)
     // Vendor-specific connection state resets; identity fields carry over.
     setForm((f) => ({ ...f, port: "" }))
-    setErrors(validate({ ...form, port: "" }))
+    setErrors(computeErrors({ ...form, port: "" }))
   }
 
   const submit = async () => {
     setTouchedSubmit(true)
-    const found = validate(form)
+    const found = computeErrors(form)
     setErrors(found)
     if (Object.keys(found).length > 0) return
     setSubmitting(true)
@@ -225,7 +220,7 @@ export function RegisterDatabaseDialog({
                   noValidate
                 >
                   <div className="grid gap-4 @[512px]:grid-cols-2">
-                    <Field id="databaseName" label="Display name" hint="Lowercase letters, numbers, and underscores" error={errors.databaseName}>
+                    <Field id="databaseName" label="Display name" hint="Lowercase letters and numbers" error={errors.databaseName}>
                       <Input
                         id="databaseName"
                         name="databaseName"
@@ -467,10 +462,12 @@ function RegistrationSuccess({
           {created.database_name} is registered
         </h3>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          {meta.label} · registered {FormatDate(created.created_at)} · demo mode
+          {meta.label} · registered {FormatDate(created.created_at)}
         </p>
         <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
-          This registration is local sample data. When the backend integration is connected, registering here will encrypt your credentials and index your schema for the agent, exactly like the real flow.
+          Your credentials were encrypted server-side with Fernet and your schema was
+          extracted. Indexing for agent retrieval runs in the background — the database
+          is already visible in your workspace.
         </p>
         <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button size="lg" className="h-11 rounded-lg px-6 text-[15px] font-medium" onClick={onDone}>

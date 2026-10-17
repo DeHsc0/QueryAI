@@ -12,13 +12,7 @@ import {
   Trash2,
 } from "lucide-react"
 import type { DatabaseSummary, DatabaseType, UpdateDatabaseRequest } from "@/lib/types"
-import {
-  clearSampleDatabases,
-  deleteDatabase,
-  listDatabases,
-  restoreSampleDatabases,
-  updateDatabase,
-} from "@/lib/api"
+import { deleteDatabase, listDatabases, updateDatabase } from "@/lib/api"
 import { getVendor } from "./vendor"
 import { FormatDate } from "./format"
 import { EmptyDatabases } from "./empty-state"
@@ -56,7 +50,7 @@ const PANEL_DISMISS_KEY = "qai_panel_dismissed"
  */
 export function DatabaseOverview() {
   const [databases, setDatabases] = useState<DatabaseSummary[] | null>(null)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [engine, setEngine] = useState<EngineFilter>("all")
   const [sort, setSort] = useState<SortKey>("added-desc")
@@ -66,12 +60,12 @@ export function DatabaseOverview() {
   const [registerOpen, setRegisterOpen] = useState(false)
 
   const load = useCallback(async () => {
-    setError(false)
+    setError(null)
     setDatabases(null)
     try {
       setDatabases(await listDatabases())
-    } catch {
-      setError(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : null)
     }
   }, [])
 
@@ -102,17 +96,14 @@ export function DatabaseOverview() {
   const stats = useMemo(() => {
     if (!databases) return null
     const byEngine = new Map<DatabaseType, number>()
-    let indexed = 0
     for (const db of databases) {
       byEngine.set(db.database_soft, (byEngine.get(db.database_soft) ?? 0) + 1)
-      if (db.dense_schema) indexed += 1
     }
     const engines = [...byEngine.entries()]
       .sort((a, b) => b[1] - a[1])
       .map(([type, n]) => `${getVendor(type).label} ×${n}`)
     return {
       total: databases.length,
-      indexed,
       engineSummary: engines.join(" · ") || "None yet",
     }
   }, [databases])
@@ -155,7 +146,6 @@ export function DatabaseOverview() {
     setDatabases((prev) => (prev ? prev.filter((db) => db.id !== id) : prev))
   }
 
-  const dev = process.env.NODE_ENV === "development"
   const showPanel = stats !== null && stats.total > 0 && !error && !panelDismissed
 
   return (
@@ -178,7 +168,7 @@ export function DatabaseOverview() {
       </div>
       {stats && stats.total > 0 && (
         <p className="mt-2 font-mono text-[11.5px] text-muted-foreground">
-          {stats.total} registered · {stats.engineSummary} · schemas indexed {stats.indexed}/{stats.total}
+          {stats.total} registered · {stats.engineSummary}
         </p>
       )}
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -274,7 +264,7 @@ export function DatabaseOverview() {
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-6 text-center" role="alert">
               <p className="text-sm text-foreground">Loading your databases failed.</p>
               <p className="mt-1 text-[13px] text-muted-foreground">
-                The connection info never reached the UI, so nothing was lost. Nothing is wrong with your data.
+                {error ?? "The backend did not return a usable response. Try again."}
               </p>
               <Button variant="outline" className="mt-4" onClick={load}>
                 Retry
@@ -283,10 +273,7 @@ export function DatabaseOverview() {
           ) : databases === null ? (
             <LoadingTable />
           ) : databases.length === 0 ? (
-            <>
-              <EmptyDatabases onConnect={() => setRegisterOpen(true)} />
-              {dev && <DevPreview load={load} />}
-            </>
+            <EmptyDatabases onConnect={() => setRegisterOpen(true)} />
           ) : visible.length === 0 ? (
             <div className="rounded-xl border border-border bg-card px-5 py-10 text-center">
               <p className="text-sm text-foreground">No databases match this view.</p>
@@ -369,8 +356,6 @@ export function DatabaseOverview() {
                   )
                 })}
               </ul>
-
-              {dev && <DevPreview load={load} />}
             </>
           )}
         </div>
@@ -533,7 +518,7 @@ function EditDatabaseDialog({
         database_name: name,
         description: description.trim() || null,
       }
-      const updated = await updateDatabase(db.id, patch)
+      const updated = await updateDatabase(db, patch)
       onSaved(updated)
     } catch {
       setSaving(false)
@@ -621,7 +606,7 @@ function DeleteDatabaseDialog({
     setDeleting(true)
     setError(null)
     try {
-      await deleteDatabase(db.id)
+      await deleteDatabase(db)
       onDeleted()
     } catch {
       setDeleting(false)
@@ -672,34 +657,6 @@ function DeleteDatabaseDialog({
 }
 
 /* ── misc ─────────────────────────────────────────────────────────── */
-
-function DevPreview({ load }: { load: () => void }) {
-  return (
-    <p className="mt-10 flex items-center gap-3 text-[11px] text-muted-foreground">
-      <span className="font-mono uppercase tracking-wider">dev preview</span>
-      <button
-        type="button"
-        className="rounded border border-border px-2 py-1 font-mono text-[10px] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => {
-          clearSampleDatabases()
-          load()
-        }}
-      >
-        empty state
-      </button>
-      <button
-        type="button"
-        className="rounded border border-border px-2 py-1 font-mono text-[10px] transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => {
-          restoreSampleDatabases()
-          load()
-        }}
-      >
-        sample data
-      </button>
-    </p>
-  )
-}
 
 function LoadingTable() {
   return (

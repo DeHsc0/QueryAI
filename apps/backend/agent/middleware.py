@@ -1,4 +1,4 @@
-from langchain.agents.middleware import dynamic_prompt , ModelRequest , wrap_model_call 
+from langchain.agents.middleware import dynamic_prompt , ModelRequest , wrap_model_call , AgentMiddleware
 from langgraph.runtime import Runtime
 from langchain.agents.middleware.types import AgentState , ModelRequest
 from langchain.messages import SystemMessage , AIMessage , HumanMessage , ToolMessage , AnyMessage
@@ -15,12 +15,12 @@ from pydantic import BaseModel
 
 
 @wrap_model_call
-def disable_parallel_tool_calls(
+async def disable_parallel_tool_calls(
     request: ModelRequest,
     handler,
 ):
     request.model_settings["parallel_tool_calls"] = False
-    return handler(request)
+    return await handler(request)
 
 @dynamic_prompt
 def add_dense_schema ( req : ModelRequest ) -> str :

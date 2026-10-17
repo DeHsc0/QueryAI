@@ -114,8 +114,14 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
     ingest_schema.delay(json.dumps({ "schema_str" : schema , "user_id" : user_id , "db_id" : str(database.id) }))
     
     return JSONResponse(content={
-    
-        "message" : "Successfully created Database"
+        
+        "data" : {
+                    "id": str(database.id),
+                    "database_name": database.database_name,
+                    "database_soft": database.database_soft,
+                    "description": database.description,
+                    "created_at": str(database.created_at),
+                }
     
     } , status_code=200)
 

@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from "../theme-provider"
 import { TooltipProvider } from "../components/ui/tooltip"
+import { ApiTokenBridge } from "../components/api-token-bridge"
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -37,7 +38,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <TooltipProvider>
-            <ClerkProvider>{children}</ClerkProvider>
+            <ClerkProvider>
+              <ApiTokenBridge />
+              {children}
+            </ClerkProvider>
           </TooltipProvider>
         </ThemeProvider>
       </body>
