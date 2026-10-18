@@ -1,12 +1,12 @@
 from fastapi import APIRouter , Request
 from schemas import Chat
-from fastapi.responses import JSONResponse 
+from fastapi.responses import JSONResponse , StreamingResponse 
 from agent.init import get_llm
 from langchain_core.messages import HumanMessage , AIMessage , ToolMessage , SystemMessage
 from agent.init import Context
 from app_state import AppState
 from task_queue.tasks import insert_chats_in_db , Turn_data
-from typing import  Any , List , Optional 
+from typing import  Any , List , Optional , Dict
 from dataclasses import dataclass
 from sqlmodel import Session , select
 from db.models import Conversations , Turns , UserDatabases 
@@ -26,6 +26,7 @@ class Tool_Call:
     output : Optional[str]
 
 router = APIRouter()
+
 
 @router.post("/")
 async def chat (req : Request , data : Chat , session : Session = Depends(get_db)):
@@ -162,6 +163,10 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
         t = await state.checkpointer.aget_tuple({"configurable": {"thread_id": str(data.conversation_id)}})
         messages = t.checkpoint["channel_values"].get("messages", []) if t else []
 
+        print("\n\n T: \n\n" , t , "\n\n\n\n\n\n\n\n")
+
+        print("\n\n messages: \n\n" , messages , "\n\n\n\n\n\n\n\n")
+
         if not messages:
             try:
                 
@@ -225,83 +230,95 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
     agent = state.agent 
 
-    tenant_id = f"{user_id}__{data.db_id}"
+    async def event_stream():
 
-    config={
+        tenant_id = f"{user_id}__{data.db_id}"
 
-        "configurable" : {
+        config={
 
-            "thread_id" : f"{new_convo_id if new_convo_id else data.conversation_id  }"
+            "configurable" : {
 
+                "thread_id" : f"{new_convo_id if new_convo_id else data.conversation_id  }"
+
+                }
             }
-        }
 
-    tool_calls : List[Tool_Call] = []
+        tool_calls : List[Tool_Call] = []
 
-    agent_output = None
+        agent_output = None
 
-    try : 
 
-        async for chunk in agent.astream( 
+        try : 
 
-            {"messages" : current_msg}, 
 
-            config=config,
+            async for chunk in agent.astream( 
 
-            context=Context( tenant_id=tenant_id , dense_schema=db_data.get("dense_schema") , db_type=db_data.get("db_type") , encrypted_creds=db_data.get("encrypted_creds") , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}" , user_prefs=user_prefs),
+                {"messages" : current_msg}, 
 
-            version="v3", 
+                config=config,
 
-            stream_mode=["updates" , "messages" , "tasks"]
+                context=Context( tenant_id=tenant_id , dense_schema=db_data.get("dense_schema") , db_type=db_data.get("db_type") , encrypted_creds=db_data.get("encrypted_creds") , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}" , user_prefs=user_prefs),
 
-        ):
+                version="v3", 
 
-            chunk_type , chunk_data = chunk
+                stream_mode=["updates" , "messages" , "tasks"]
 
-            if chunk_type == "tasks" and chunk_data["name"] == "tools" and chunk_data.get("input") and chunk_data["input"][0]["name"] == "run_sql" :
+            ):
 
-                tool_name = chunk_data["input"][0]["name"]
-                call_id = chunk_data["input"][0]["id"]
-                args = chunk_data["input"][0]["args"]
+                chunk_type , chunk_data = chunk
 
-                tool_calls.append(Tool_Call(call_id=call_id , tool_name=tool_name , args=args , output=None))
+                if chunk_type == "tasks" and chunk_data["name"] == "tools" and chunk_data.get("input") and chunk_data["input"][0]["name"] == "run_sql" :
 
-            elif chunk_type == "updates" :
+                    tool_name = chunk_data["input"][0]["name"]
+                    call_id = chunk_data["input"][0]["id"]
+                    args = chunk_data["input"][0]["args"]
 
-                if chunk_data.get("model") and isinstance( chunk_data["model"]["messages"][0] , AIMessage):
+                    print("Should be yeilding")
 
-                    agent_output = chunk_data["model"]["messages"][0].content
-                
-                if chunk_data.get("tools"):
+                    yield f"data: {json.dumps({"type" : tool_name , "query" : args })}\n\n"
 
-                    tool_data = chunk_data["tools"]["messages"][0]
+                    tool_calls.append(Tool_Call(call_id=call_id , tool_name=tool_name , args=args , output=None))
 
-                    if isinstance(tool_data , ToolMessage):
+                elif chunk_type == "updates" :
 
-                        for calls in tool_calls: 
+                    if chunk_data.get("model") and isinstance( chunk_data["model"]["messages"][0] , AIMessage):
 
-                            if tool_data.tool_call_id == calls.call_id: 
+                        agent_output = chunk_data["model"]["messages"][0].content
+                    
+                    if chunk_data.get("tools"):
 
-                                calls.output = chunk_data["tools"]["messages"][0]    
-        
-    except Exception as e : 
+                        tool_data = chunk_data["tools"]["messages"][0]
 
-        return JSONResponse( content={ "message" : str(e) , "success" : False } , status_code=500 )
+                        if isinstance(tool_data , ToolMessage):
 
-    print( "\n\n\n" , agent_output , "\n\n\n" )
+                            for calls in tool_calls: 
 
-    sql_queries = [ tool_call.args["query"] for tool_call in tool_calls ]
+                                if tool_data.tool_call_id == calls.call_id: 
 
-    if agent_output : 
+                                    calls.output = chunk_data["tools"]["messages"][0]    
+            
+        except Exception as e : 
 
-        turn_data = Turn_data( ai_response=agent_output , user_query=data.query , conversation_id=f"{data.conversation_id or new_convo_id }" , database_id=data.db_id , sql_query=sql_queries if len(sql_queries) > 0 else None   )
-        
-        result = insert_chats_in_db.delay(turn_data.model_dump())
+            yield f'data: { "message" : str(e) , "success" : False }\n\n'
 
-    return JSONResponse(content={
+        yield f"data: {json.dumps({"output" : agent_output})}\n\n"
 
-        "data" : ""
+        sql_queries = [ tool_call.args["query"] for tool_call in tool_calls ]
 
-    } , status_code=200)
+        if agent_output : 
+
+            turn_data = Turn_data( ai_response=agent_output , user_query=data.query , conversation_id=f"{data.conversation_id or new_convo_id }" , database_id=data.db_id , sql_query=sql_queries if len(sql_queries) > 0 else None   )
+            
+            result = insert_chats_in_db.delay(turn_data.model_dump())
+            
+            yield 'data: {"type": "done"}\n\n'
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    # return JSONResponse(content={
+
+    #     "data" : ""
+
+    # } , status_code=200)
 
 

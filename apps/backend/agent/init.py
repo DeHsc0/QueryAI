@@ -120,7 +120,7 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         3. Return only the data necessary to answer the user's question.
         4. Always limit result size to avoid unnecessarily large responses and token usage.
         5. Never retrieve entire tables be specific at all times.
-        6. Prefer aggregation (COUNT, SUM, AVG, etc.) when the user asks for statistics instead of retrieving individual rows.
+        6. Prefer aggregation (COUNT, SUM, AVG, MIN and MAX ) when the user asks for statistics instead of retrieving individual rows.
         7. Select only the required columns. Avoid SELECT * .
         8. If the user's request is ambiguous, ask a clarifying question or retrieving context instead of generating SQL.
         9. Base the query strictly on the provided database schema and database type. Never invent tables, columns, or relationships.
