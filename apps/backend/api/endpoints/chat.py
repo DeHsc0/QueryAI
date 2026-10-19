@@ -118,14 +118,14 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
                 User: "Show me the important numbers from my data"
                 Title: Key Business Metrics
     
-                User: "Hey"
+                User: "Hey , How can you help me"
                 Title: New Conversation
     
                 User: "Hello"
-                Title: New Conversation
+                Title: Friendly greeting
     
-                User: "Hi, can you help me?"
-                Title: New Conversation
+                User: "Hi, lets have a casual conversation"
+                Title: Casual conversation
     
             """), 
             HumanMessage(content=data.query)
@@ -209,7 +209,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
                     "AND": [
                         {"user_id": user_id},
                         {"app_id": data.db_id},
-                        {"run_id": f"{new_convo_id if new_convo_id else data.conversation_id }"},
+                        {"run_id": f"{str(new_convo_id if new_convo_id else data.conversation_id) }"},
                     ]
                 }
             )
@@ -238,7 +238,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
             "configurable" : {
 
-                "thread_id" : f"{new_convo_id if new_convo_id else data.conversation_id  }"
+                "thread_id" : f"{str(new_convo_id if new_convo_id else data.conversation_id)  }"
 
                 }
             }
@@ -257,7 +257,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
                 config=config,
 
-                context=Context( tenant_id=tenant_id , dense_schema=db_data.get("dense_schema") , db_type=db_data.get("db_type") , encrypted_creds=db_data.get("encrypted_creds") , conversation_id=f"{new_convo_id if new_convo_id else data.conversation_id}" , user_prefs=user_prefs),
+                context=Context( tenant_id=tenant_id , dense_schema=db_data.get("dense_schema") , db_type=db_data.get("db_type") , encrypted_creds=db_data.get("encrypted_creds") , conversation_id=f"{str(new_convo_id if new_convo_id else data.conversation_id)}" , user_prefs=user_prefs),
 
                 version="v3", 
 
@@ -273,9 +273,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
                     call_id = chunk_data["input"][0]["id"]
                     args = chunk_data["input"][0]["args"]
 
-                    print("Should be yeilding")
-
-                    yield f"data: {json.dumps({"type" : tool_name , "query" : args })}\n\n"
+                    yield f"data: {json.dumps({"type" : "tool_call" , "data" : args  , "conversation_id" : str(new_convo_id if new_convo_id else data.conversation_id) })}\n\n"
 
                     tool_calls.append(Tool_Call(call_id=call_id , tool_name=tool_name , args=args , output=None))
 
@@ -291,17 +289,25 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
                         if isinstance(tool_data , ToolMessage):
 
+                            print("gonna yield the tool message data ")
+
                             for calls in tool_calls: 
 
                                 if tool_data.tool_call_id == calls.call_id: 
+
+                                    print("Data without content \n\n" , chunk_data["tools"]["messages"][0] , "\n\n")
+
+                                    print(" DAta got from content \n\n" , chunk_data["tools"]["messages"][0].content , "\n\n")
+
+                                    yield f"data: {json.dumps({"type" : "tool_result" , "data" : json.dumps(chunk_data["tools"]["messages"][0].content ) , "conversation_id" : str(new_convo_id if new_convo_id else data.conversation_id) }) } \n\n"
 
                                     calls.output = chunk_data["tools"]["messages"][0]    
             
         except Exception as e : 
 
-            yield f'data: { "message" : str(e) , "success" : False }\n\n'
+            yield f'data: {json.dumps({ "message" : str(e) , "success" : False , "conversation_id" : str(new_convo_id if new_convo_id else data.conversation_id)  })}\n\n'
 
-        yield f"data: {json.dumps({"output" : agent_output})}\n\n"
+        yield f"data: {json.dumps({ "type" : "output" ,  "data" : agent_output , "conversation_id" : str(new_convo_id if new_convo_id else data.conversation_id) })}\n\n"
 
         sql_queries = [ tool_call.args["query"] for tool_call in tool_calls ]
 
@@ -311,7 +317,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
             
             result = insert_chats_in_db.delay(turn_data.model_dump())
             
-            yield 'data: {"type": "done"}\n\n'
+            yield f'data: {json.dumps({"type": "done" , "conversation_id" : str(new_convo_id if new_convo_id else data.conversation_id) })}\n\n'
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

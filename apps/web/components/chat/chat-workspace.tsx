@@ -5,6 +5,7 @@ import { Menu } from "lucide-react"
 import type { ChatMessage } from "./chat-types"
 import type { ChatStreamEvent, Conversation, DatabaseSummary, SqlResultRow, Turn } from "@/lib/types"
 import {
+  ApiError,
   createConversation,
   getTurns,
   listConversations,
@@ -115,6 +116,21 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
 
   /* ── selection / new chat ──────────────────────────────────────── */
 
+  /** Adopts the backend-issued conversation id for the currently active one: marks it backend-known, swaps the sidebar's local stand-in id, and re-points the active selection. Returns the id to use from here on. */
+  const adoptServerConversationId = useCallback(
+    (localId: string, serverId: string): string => {
+      backendConversationIdsRef.current = new Set(backendConversationIdsRef.current).add(serverId)
+      if (serverId === localId) return localId
+      activeIdRef.current = serverId
+      setActiveId(serverId)
+      setConversations((prev) =>
+        prev.map((c) => (c.id === localId ? { ...c, id: serverId } : c))
+      )
+      return serverId
+    },
+    []
+  )
+
   const selectConversation = useCallback(
     async (id: string) => {
       if (id === activeIdRef.current) return
@@ -221,26 +237,45 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
             conversation_id: requestConversationId,
             db_id: db.id,
           },
-          // local id: keys the mock turn store so in-session history restores
+          // local id: keys the turn store so in-session history restores
           convId,
         )) {
           if (runIdRef.current !== myRun || activeIdRef.current !== convId) {
             return // abandoned: new chat or conversation switch mid-stream
           }
+          if (event.type === "conversation") {
+            // The backend announces the conversation it actually ran on
+            // (fresh chats create one mid-stream). Adopt it: it becomes the
+            // active conversation and the next question sends it back.
+            convId = adoptServerConversationId(convId, event.id)
+            continue
+          }
           applyEvent(assistantTurnId, event)
           if (event.type === "done") return
         }
-      } catch {
+      } catch (error) {
         // connection dropped mid-turn: keep everything already streamed
         if (runIdRef.current === myRun && activeIdRef.current === convId) {
           finalizeStreamingMessage(assistantTurnId, {
-            error: "The response stopped before finishing. Your messages are safe — try again.",
+            error:
+              error instanceof ApiError && error.message
+                ? error.message
+                : "The response stopped before finishing. Your messages are safe — try again.",
           })
           if (!composer) setComposer(lastSubmittedRef.current ?? "")
         }
       }
     },
-    [bumpRun, composer, dbLoading, dbMeta, finalizeStreamingMessage, messages, applyEvent]
+    [
+      adoptServerConversationId,
+      bumpRun,
+      composer,
+      dbLoading,
+      dbMeta,
+      finalizeStreamingMessage,
+      messages,
+      applyEvent,
+    ]
   )
 
   const stop = useCallback(() => {
@@ -416,6 +451,11 @@ function doneTools(m: ChatMessage): ChatMessage {
 function handleStreamingEvent(m: ChatMessage, event: ChatStreamEvent): ChatMessage {
   if (event.type === "done") {
     return { ...doneTools(m), streaming: false }
+  }
+
+  // Conversation adoption is handled in send(); render nothing.
+  if (event.type === "conversation") {
+    return m
   }
 
   if (event.type === "tool_call") {

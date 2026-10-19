@@ -2,6 +2,7 @@
 
 import { Check, RefreshCw, Sparkles } from "lucide-react"
 import type { ChatMessage } from "./chat-types"
+import { MarkdownMessage } from "./markdown-message"
 import { SqlResultCard } from "./sql-result-card"
 import type { DatabaseSummary } from "@/lib/types"
 import { getVendor } from "@/components/dashboard/vendor"
@@ -175,14 +176,14 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
 
       {/* analysis text */}
       {message.content && (
-        <div className="whitespace-pre-wrap text-[14.5px] leading-relaxed text-foreground">
-          {message.content}
-          {streamingText && (
-            <span
-              className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] bg-accent-bright demo-ping"
-              aria-hidden="true"
-            />
+        <div
+          className={cn(
+            "text-[14.5px] leading-relaxed text-foreground",
+            streamingText &&
+              "[&>*:last-child]:after:ml-0.5 [&>*:last-child]:after:inline-block [&>*:last-child]:after:h-[1em] [&>*:last-child]:after:w-[2px] [&>*:last-child]:after:translate-y-[2px] [&>*:last-child]:after:bg-accent-bright [&>*:last-child]:after:animate-pulse [&>*:last-child]:after:align-middle"
           )}
+        >
+          <MarkdownMessage content={message.content} />
         </div>
       )}
       {message.errorPayload && (

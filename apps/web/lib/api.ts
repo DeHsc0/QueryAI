@@ -3,11 +3,9 @@
  *
  * Database, conversation, and turn endpoints talk to the real FastAPI backend
  * (Clerk Bearer auth, every response validated with zod — see lib/schemas.ts).
- *  The chat send pipeline fires the real POST /api/chat (sendChatRequest,
- *  called from streamChat) but keeps the mock streaming scenario for the UI
- *  until the backend starts returning usable responses; the dashboard
- *  Edit/Delete dialogs are still mock-backed until the backend PATCH/DELETE
- *  endpoints exist.
+ * The chat send pipeline consumes the backend's real SSE stream from
+ * POST /api/chat; the dashboard Edit/Delete dialogs are still mock-backed
+ * until the backend PATCH/DELETE endpoints exist.
  */
 
 import axios from "axios"
@@ -26,6 +24,7 @@ import type {
   ChatStreamEvent,
   DatabaseSummary,
   RegisterDatabaseRequest,
+  SqlResult,
   SqlResultRow,
   Turn,
   UpdateDatabaseRequest,
@@ -109,9 +108,9 @@ function parse<T>(schema: z.ZodType<T>, payload: unknown, endpoint: string): T {
 //    GET /api/turns/{db_id}/{conversation_id}  → { data: [turn…] } (5 newest,
 //        newest-first — reordered chronologically below)
 //
-//  The send pipeline (POST /api/chat) is still mock, so mock-created
-//  conversations only exist locally; getTurns falls back to the local
-//  store for those before giving up.
+//  POST /api/chat streams server-sent events (see the Chat pipeline section),
+//  so mock-created conversations only exist locally; getTurns falls back to
+//  the local store for those before giving up.
 // ──────────────────────────────────────────
 
 const turnsStore: Map<string, Turn[]> = new Map()
@@ -165,8 +164,31 @@ export async function registerDatabase(
 }
 
 // ──────────────────────────────────────────
-//  Chat pipeline — real request (sendChatRequest), mock streaming responses
-//  until the backend sends usable data back
+//  Chat pipeline — real SSE streaming
+//
+//  POST /api/chat streams `text/event-stream` frames, emitted in this order
+//  (frames may interleave as the agent loops tools → model):
+//
+//    {"type": "tool_call",   "data": {"query": "SELECT …"}}   — every run_sql
+//                                                              call (query text,
+//                                                              no result rows)
+//    {"type": "tool_result", "data": <ToolMessage | rows[]>} — captured output
+//                                                              of that run_sql
+//    {"type": "output",      "data": "…full analysis…"}      — final answer,
+//                                                              single event
+//    {"type": "done"}                                        — turn handed to
+//                                                              the queue
+//    {"message": "…", "success": false}                      — in-stream failure
+//
+//  Every frame also carries "conversation_id" (the backend-issued thread id
+//  it is running on). It is surfaced to the UI as a synthetic `conversation`
+//  event so subsequent questions send it back.
+//
+//  Frames are scanned as JSON objects rather than split on blank lines:
+//  the backend's tool_result frame currently ends without the "\n\n" a
+//  strict SSE frame needs, so neighboring frames can arrive glued together.
+//  Unknown event shapes are ignored, which keeps the bridge forward-compatible
+//  (e.g. token-level `agent_output` deltas, once the backend streams them).
 // ──────────────────────────────────────────
 
 export async function createConversation(
@@ -188,158 +210,306 @@ export async function createConversation(
   return conversation
 }
 
-const revenueRows = () => [
-  { product: "Meridian Desk Lamp", revenue: 4820, orders: 96 },
-  { product: "Fieldline Backpack", revenue: 3690, orders: 74 },
-  { product: "Halden Mug Set", revenue: 3156, orders: 118 },
-]
+export async function* streamChat(
+  request: ChatRequest,
+  // Local conversation id (may not exist on the backend): the turn store is
+  // keyed by this, so locally-created conversations still restore their
+  // in-session history.
+  localConversationId?: string,
+): AsyncGenerator<ChatStreamEvent, void, void> {
+  // Aborting on generator exit: whoever stops iterating (user hit New chat,
+  // switched conversations, or pressed stop) tears the fetch down with it.
+  const controller = new AbortController()
 
-const growthRows = () => [
-  { month: "2025-05", revenue: 52000 },
-  { month: "2025-06", revenue: 56400 },
-  { month: "2025-07", revenue: 60500 },
-  { month: "2025-08", revenue: 65200 },
-  { month: "2025-09", revenue: 68900 },
-]
+  // The backend's tool events carry no ids, so call ids are minted here in
+  // arrival order; run_sql results pair back to calls the same way (FIFO).
+  // Everything is also collected for the locally persisted turn below.
+  let sqlSeq = 0
+  const pendingCalls: string[] = []
+  const sqlQueries: string[] = []
+  const sqlResults: SqlResult[] = []
+  let answer = ""
 
-const customerRows = () => [
-  { customer: "Alice Johnson", orders: 18, total: 15420.5 },
-  { customer: "Bob Smith", orders: 14, total: 12300.0 },
-  { customer: "Carol Lee", orders: 9, total: 8750.75 },
-]
+  try {
+    const token = await tokenProvider().catch(() => null)
 
-interface StreamScenario {
-  sql: string
-  rows: () => Record<string, unknown>[]
-  answer: string
+    const resp = await fetch(`${BACKEND_URL}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        query: request.query,
+        conversation_id: request.conversation_id ?? null,
+        db_id: request.db_id,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!resp.ok) {
+      let message = `Request failed with status ${resp.status}`
+      try {
+        const body: unknown = await resp.json()
+        const record = body as { message?: unknown } | null
+        if (typeof record?.message === "string") message = record.message
+      } catch {
+        // non-JSON error body — keep the status-based message
+      }
+      throw new ApiError(message, resp.status)
+    }
+
+    if (!resp.body) throw new ApiError("The backend returned no stream.")
+
+    // The backend stamps every frame with the conversation id it is running
+    // on. Fresh chats learn their id from the first frame and it is handed
+    // to the UI (which then sends it back on subsequent questions).
+    let serverConversationId: string | null = null
+
+    for await (const frame of sseFrames(resp.body)) {
+      const event = frame as Record<string, unknown>
+      const { type } = event
+
+      const frameConversationId =
+        typeof event.conversation_id === "string" && event.conversation_id.length > 0
+          ? event.conversation_id
+          : null
+      if (frameConversationId && frameConversationId !== serverConversationId) {
+        serverConversationId = frameConversationId
+        if (frameConversationId !== request.conversation_id) {
+          yield { type: "conversation", id: frameConversationId }
+        }
+      }
+
+      // In-stream failure: {"message": "…", "success": false}
+      if (type === undefined && event.success === false) {
+        throw new ApiError(
+          typeof event.message === "string"
+            ? event.message
+            : "The agent failed mid-turn."
+        )
+      }
+
+      if (type === "tool_call" || type === "run_sql") {
+        const args = (
+          event.data !== null && typeof event.data === "object" ? event.data : {}
+        ) as Record<string, unknown>
+        sqlSeq += 1
+        const callId = `run_sql-${sqlSeq}`
+        sqlQueries.push(typeof args.query === "string" ? args.query : "")
+        pendingCalls.push(callId)
+        yield { type: "tool_call", tool_name: "run_sql", call_id: callId, args }
+      } else if (type === "tool_result") {
+        const output = toolResultOutput(event.data)
+        const callId = pendingCalls.shift() ?? `run_sql-${sqlSeq + 1}`
+        sqlResults.push({ columns: rowColumns(output), rows: parseRows(output) })
+        yield { type: "tool_result", call_id: callId, output: output ?? "" }
+      } else if (type === "output") {
+        // The whole answer arrives as one event. It reveals word-by-word at
+        // the token-streaming pace (purely cosmetic — data is already here),
+        // so per-chunk buffering inside the UI never makes a delay visible.
+        if (typeof event.data === "string" && event.data.length > 0) {
+          answer = event.data
+          for (const chunk of event.data.match(/\S+\s*/g) ?? []) {
+            await delay(TOKEN_PACE_MS)
+            yield { type: "agent_output", content: chunk }
+          }
+        }
+      } else if (type === "agent_output") {
+        // Forward-compatible: token deltas, once the backend streams them.
+        if (typeof event.content === "string" && event.content.length > 0) {
+          answer += event.content
+          yield { type: "agent_output", content: event.content }
+        }
+      } else if (type === "done") {
+        persistLocalTurn(
+          serverConversationId ?? localConversationId ?? request.conversation_id,
+          request.query,
+          answer,
+          sqlQueries,
+          sqlResults,
+        )
+        yield { type: "done" }
+        return
+      }
+    }
+
+    // Stream ended without a done frame. An answer without done still
+    // finalizes the turn in the UI; no answer means the agent produced
+    // nothing, which is surfaced as an error rather than a silent hang.
+    if (answer) {
+      persistLocalTurn(
+        serverConversationId ?? localConversationId ?? request.conversation_id,
+        request.query,
+        answer,
+        sqlQueries,
+        sqlResults,
+      )
+      yield { type: "done" }
+    } else {
+      throw new ApiError("The agent returned no answer for this question.")
+    }
+  } finally {
+    controller.abort()
+  }
 }
 
-function scenarioFor(query: string): StreamScenario {
-  const q = query.toLowerCase()
-  if (q.includes("customer")) {
-    return {
-      sql: "SELECT c.name AS customer, COUNT(*) AS orders, SUM(o.total) AS total\nFROM customers c\nJOIN orders o ON o.customer_id = c.id\nGROUP BY c.name\nORDER BY orders DESC\nLIMIT 5;",
-      rows: customerRows,
-      answer:
-        "Alice Johnson places the most orders (18, $15,420.50 lifetime total), ahead of Bob Smith (14) and Carol Lee (9). Your top three customers hold a significant share of order volume, so retention programs focused on this segment have real leverage.",
+// ──────────────────────────────────────────
+//  SSE frame parsing
+//
+//  Yields the JSON object of every `data: {…}` frame. The scanner walks each
+//  object character-by-character (string/escape aware), so frames glued
+//  together by a missing trailing blank line still parse cleanly, and an
+//  object that crosses a chunk boundary simply waits for more bytes.
+// ──────────────────────────────────────────
+
+async function* sseFrames(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<unknown, void, void> {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      while (true) {
+        const next = nextSseFrame(buffer)
+        if (!next) break
+        buffer = next.rest
+        if (next.frame !== null) yield next.frame
+      }
     }
-  }
-  if (q.includes("trend") || q.includes("growth") || q.includes("monthly") || q.includes("month")) {
-    return {
-      sql: "SELECT DATE_FORMAT(o.created_at, '%Y-%m') AS month, SUM(o.total) AS revenue\nFROM orders o\nGROUP BY month\nORDER BY month;",
-      rows: growthRows,
-      answer:
-        "Monthly revenue climbs steadily: $52.0k (May), $56.4k (Jun), $60.5k (Jul), $65.2k (Aug), $68.9k (Sep). That is a 32% gain over five months with no down month, so growth is structural rather than a one-off spike.",
-    }
-  }
-  if (q.includes("products") || q.includes("product") || q.includes("revenue")) {
-    return {
-      sql: "SELECT p.name AS product, SUM(o.total) AS revenue, COUNT(*) AS orders\nFROM orders o\nJOIN products p ON p.id = o.product_id\nWHERE o.created_at >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)\nGROUP BY p.name\nORDER BY revenue DESC\nLIMIT 5;",
-      rows: revenueRows,
-      answer:
-        "The Meridian Desk Lamp leads the quarter at $4,820 across 96 orders. Home-office goods dominate the top five: the desk lamp, backpack, and desk mat together carry most of the range, so a bundle across them should test well.",
-    }
-  }
-  return {
-    sql: "SELECT table_name, n_rows\nFROM sample_table_stats\nWHERE schema = 'YOUR_SCHEMA_NAME'\nORDER BY n_rows DESC\nLIMIT 3;",
-    rows: () => [
-      { table_name: "orders", n_rows: 1240 },
-      { table_name: "customers", n_rows: 310 },
-      { table_name: "products", n_rows: 24 },
-    ],
-    answer:
-      "This dataset is compact: 1,240 orders, 310 customers, and 24 products. Every order relates to one customer and one product at a join depth of two, so aggregated answers stay fast and the dimensional tables carry most of the analytical value.",
+  } finally {
+    reader.cancel().catch(() => {})
   }
 }
 
-export interface ChatSendResult {
-  ok: boolean
-  status?: number
-  message: string | null
+/** Extracts one `data: {…}` JSON frame from the head of the buffer, or null when no complete frame is available yet. */
+function nextSseFrame(buffer: string): { frame: unknown; rest: string } | null {
+  const at = buffer.indexOf("data:")
+  if (at === -1) return null
+
+  const brace = buffer.indexOf("{", at + 5)
+  if (brace === -1) return null // JSON body not fully received yet
+
+  let depth = 0
+  let inString = false
+  let escaped = false
+  let end = -1
+
+  for (let i = brace; i < buffer.length; i++) {
+    const ch = buffer[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === "\\") escaped = true
+      else if (ch === '"') inString = false
+    } else if (ch === '"') {
+      inString = true
+    } else if (ch === "{") {
+      depth += 1
+    } else if (ch === "}") {
+      depth -= 1
+      if (depth === 0) {
+        end = i + 1
+        break
+      }
+    }
+  }
+
+  if (end === -1) return null // object crosses a chunk boundary
+
+  let frame: unknown
+  try {
+    frame = JSON.parse(buffer.slice(brace, end))
+  } catch {
+    frame = null
+  }
+  return { frame, rest: buffer.slice(end) }
 }
 
 /**
- * The real chat request. POST /api/chat exists on the backend but currently
- * returns nothing useful (`{"data": ""}` once the entire agent run has
- * completed), so the outcome is captured and logged here; real response
- * handling (SSE bridge → ChatStreamEvent) lands when the backend streams.
+ * Normalizes a tool_result payload into the JSON text the UI parses.
+ * Accepted shapes (run_sql content is itself a JSON string, so it frequently
+ * arrives double-encoded):
+ *   "[{…row…}]"                          — rows JSON directly
+ *   "\"[{…row…}]\""                      — double-encoded rows (json.dumps of the content string)
+ *   {"content": "[{…row…}]"} (or its JSON string) — ToolMessage dict / envelope
+ * Plain strings (e.g. run_sql validation errors) pass through untouched so
+ * the UI can still show a query card, just without a table.
  */
-export async function sendChatRequest(request: ChatRequest): Promise<ChatSendResult> {
+function toolResultOutput(data: unknown): string | null {
+  if (typeof data === "string") {
+    let text = data
+    for (let depth = 0; depth < 3; depth++) {
+      try {
+        const parsed: unknown = JSON.parse(text)
+        if (Array.isArray(parsed)) return text // rows JSON reached
+        if (typeof parsed === "string") {
+          text = parsed // still encoded — decode one more layer
+          continue
+        }
+        if (parsed !== null && typeof parsed === "object") {
+          const content = (parsed as Record<string, unknown>).content
+          if (typeof content === "string") return content
+          return JSON.stringify(parsed)
+        }
+        return JSON.stringify(parsed)
+      } catch {
+        return text // not JSON: opaque output (parse/validation error text)
+      }
+    }
+    return text
+  }
+  if (data !== null && typeof data === "object") {
+    const record = data as Record<string, unknown>
+    if (typeof record.content === "string") return record.content
+  }
+  return null
+}
+
+/** Parses run_sql output (JSON array of row objects) into structured rows. */
+function parseRows(output: string | null): SqlResultRow[] {
+  if (!output) return []
   try {
-    const resp = await api.post("/api/chat", {
-      query: request.query,
-      conversation_id: request.conversation_id ?? null,
-      db_id: request.db_id,
-    })
-    return { ok: true, status: resp.status, message: null }
-  } catch (error) {
-    const e = toApiError(error)
-    console.warn(`Chat request failed (${e.status ?? "network error"}): ${e.message}`)
-    return { ok: false, status: e.status, message: e.message }
+    const parsed: unknown = JSON.parse(output)
+    return Array.isArray(parsed) ? (parsed as SqlResultRow[]) : []
+  } catch {
+    return []
   }
 }
 
-export async function* streamChat(
-  request: ChatRequest,
-  // Local conversation id (may not exist on the backend): the mock turn
-  // store is keyed by this, so locally-created conversations still restore
-  // their in-session history.
-  localConversationId?: string,
-): AsyncGenerator<ChatStreamEvent, void, void> {
-  // Fire the real POST /api/chat for this turn (sendChatRequest captures the
-  // outcome without throwing — the backend streams nothing yet). UI streaming
-  // is unchanged: the mock scenario below keeps the transcript honest until
-  // real response handling replaces it.
-  void sendChatRequest(request)
+function rowColumns(output: string | null): string[] {
+  const rows = parseRows(output)
+  return rows.length > 0 ? Object.keys(rows[0] ?? {}) : []
+}
 
-  const scenario = scenarioFor(request.query)
-  const callRetrieve = "call_retrieve"
-  const callSql = "call_sql"
+/** Persists the finished turn locally so reopening a locally-created conversation restores it (stand-in for the Celery-backed insert_chats_in_db task). Keyed by the resolved conversation id (backend-issued when the stream announced one). */
+function persistLocalTurn(
+  conversationId: string | undefined | null,
+  userQuery: string,
+  answer: string,
+  sqlQueries: string[],
+  sqlResults: SqlResult[],
+): void {
+  if (!conversationId || !answer) return
 
-  await delay(400)
-  yield { type: "tool_call", tool_name: "retrieve_context", call_id: callRetrieve, args: {} }
-  await delay(700)
-  yield {
-    type: "tool_result",
-    call_id: callRetrieve,
-    output: JSON.stringify({ ok: true, tables: 3 }),
+  const turn: Turn = {
+    id: crypto.randomUUID(),
+    conversation_id: conversationId,
+    user_query: userQuery,
+    ai_response: answer,
+    sql_query: sqlQueries.length > 0 ? sqlQueries : null,
+    results: sqlResults,
+    created_at: new Date().toISOString(),
   }
-  await delay(550)
-  yield { type: "tool_call", tool_name: "run_sql", call_id: callSql, args: { query: scenario.sql } }
-  await delay(750)
-  yield { type: "tool_result", call_id: callSql, output: JSON.stringify(scenario.rows()) }
-
-  const chunks = scenario.answer.match(/\S+\s*/g) ?? []
-  for (const chunk of chunks) {
-    await delay(55)
-    yield { type: "agent_output", content: chunk }
-  }
-  await delay(150)
-
-  // Persist the finished turn so reopening the conversation restores it
-  // (mock stand-in for the Celery-backed insert_chats_in_db task). Keyed by
-  // the local conversation id — backend-created records come later.
-  const persistConversationId = localConversationId ?? request.conversation_id
-  if (persistConversationId) {
-    const turn: Turn = {
-      id: crypto.randomUUID(),
-      conversation_id: persistConversationId,
-      user_query: request.query,
-      ai_response: scenario.answer,
-      sql_query: [scenario.sql],
-      results: [
-        {
-          columns: Object.keys(scenario.rows()[0] ?? {}),
-          rows: scenario.rows() as SqlResultRow[],
-        },
-      ],
-      created_at: new Date().toISOString(),
-    }
-    const list = turnsStore.get(persistConversationId) ?? []
-    turnsStore.set(persistConversationId, [...list, turn])
-  }
-
-  yield { type: "done" }
+  const list = turnsStore.get(conversationId) ?? []
+  turnsStore.set(conversationId, [...list, turn])
 }
 
 // ──────────────────────────────────────────
@@ -349,6 +519,9 @@ export async function* streamChat(
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
+
+/** Revealed-answer pace for one-shot `output` frames (ms per word). */
+const TOKEN_PACE_MS = 40
 
 function generateTitle(query: string): string {
   const q = query.toLowerCase()

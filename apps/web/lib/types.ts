@@ -111,10 +111,21 @@ export interface DoneEvent {
   type: "done";
 }
 
+/**
+ * Emitted once when the stream reveals the backend-issued conversation id
+ * (fresh chats: the backend creates the conversation and id mid-stream;
+ * every subsequent request sends this id back).
+ */
+export interface ConversationEvent {
+  type: "conversation";
+  id: string;
+}
+
 export type ChatStreamEvent =
   | ToolCallEvent
   | ToolResultEvent
   | AgentOutputEvent
+  | ConversationEvent
   | DoneEvent;
 
 // Parsed SQL result rows — the run_sql tool returns a JSON array of
