@@ -10,6 +10,8 @@ import json
 from lib.config import get_qdrant_client
 from sqlmodel import Session, select
 from task_queue.tasks import ingest_schema
+from lib.config import get_redis_client , get_qdrant_client 
+from qdrant_client import models  
 
 router = APIRouter() 
 
@@ -87,11 +89,12 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
     } , status_code=301)
 
 
-    encrypt_data = encrypt_credentials( data.creds )
-
-    schema , db_dense_schema = store_schema( data.creds )
-
     try:
+        
+        encrypt_data = encrypt_credentials( data.creds )
+
+        schema , db_dense_schema = store_schema( data.creds )
+
 
         database =  UserDatabases(
             user_clerk_id=user_id,
@@ -125,3 +128,44 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
     
     } , status_code=200)
 
+@router.delete("/{db_id}") 
+async def delete_database( req : Request , db_id : str , session : Session = Depends(get_db)): 
+
+    try :
+
+        user_id : str = req.state.clerk.get("sub")
+
+        user_db = session.exec( select( UserDatabases ).where( UserDatabases.id == db_id , UserDatabases.user_clerk_id  == user_id) )
+
+        if not user_db: 
+            return JSONResponse(content={ "message" : "Database Dosent exists"} , status_code=301)
+
+        delete_user_db = session.delete(user_db)
+
+        qdrant = get_qdrant_client()
+
+        tenant_id = f"{user_id}__{db_id}"
+
+        delete = qdrant.delete(
+            collection_name="your_collection_name",
+            points_selector=models.FilterSelector(
+                filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="tenant_id",
+                            match=models.MatchValue(value=tenant_id),
+                        )
+                    ]
+                )
+            ),
+            wait=True,  
+        )
+
+        print("\n\n Delete \n\n" , delete , "\n\n\n\n")
+
+        return JSONResponse(content={ "message" : "Successfully deleted the registered database."})
+
+    except Exception as e: 
+        return JSONResponse(content={ "message" : "Unable to delete the registered database."} , status_code=500)
+
+    

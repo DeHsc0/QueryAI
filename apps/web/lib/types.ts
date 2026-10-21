@@ -19,7 +19,7 @@ export interface DatabaseSummary {
 /** Payload for registering a database — matches backend Database_Creation. */
 export interface RegisterDatabaseRequest {
   database_name: string;
-  description?: string;
+  description?: string | null;
   creds: Credentials;
 }
 
@@ -55,6 +55,16 @@ export interface Conversation {
 export interface CreateConversationRequest {
   database_id: string;
   query?: string;
+}
+
+/**
+ * Response of GET /api/conversation/{db_id} — the owning database plus all of
+ * its conversations in one call, so the chat workspace can hydrate its sidebar
+ * and header without listing every database first.
+ */
+export interface DatabaseWithConversations {
+  database: DatabaseSummary;
+  conversations: Conversation[];
 }
 
 // Turn / conversation history — match turns.py + models.py Turns

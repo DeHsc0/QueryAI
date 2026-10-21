@@ -606,7 +606,7 @@ function DeleteDatabaseDialog({
     setDeleting(true)
     setError(null)
     try {
-      await deleteDatabase(db)
+      await deleteDatabase(db.id)
       onDeleted()
     } catch {
       setDeleting(false)

@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input"
 interface FormState {
   databaseName: string
   description: string
+  connectionString: string
   host: string
   port: string
   database: string
@@ -33,11 +34,133 @@ type Errors = RegistrationFormErrors
 const blankForm: FormState = {
   databaseName: "",
   description: "",
+  connectionString: "",
   host: "",
   port: "",
   database: "",
   username: "",
   password: "",
+}
+
+const VENDOR_TO_SCHEME: Record<DatabaseType, string> = {
+  postgresql: "postgresql",
+  mysql: "mysql",
+  oracle: "oracle",
+  microsoft: "sqlserver",
+}
+
+const SCHEME_TO_VENDOR: Record<string, DatabaseType> = {
+  postgresql: "postgresql",
+  postgres: "postgresql",
+  mysql: "mysql",
+  mariadb: "mysql",
+  oracle: "oracle",
+  oracledb: "oracle",
+  sqlserver: "microsoft",
+  mssql: "microsoft",
+  microsoft: "microsoft",
+}
+
+type ParsedConnection = {
+  vendor?: DatabaseType
+  host?: string
+  port?: string
+  database?: string
+  username?: string
+  password?: string
+}
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function parseConnectionUrl(raw: string): ParsedConnection | null {
+  const withoutJdbc = raw.trim().replace(/^jdbc:/i, "")
+  const match = /^([a-zA-Z][a-zA-Z0-9+]*):\/\/(.*)$/.exec(withoutJdbc)
+  if (!match) return null
+  const vendor = SCHEME_TO_VENDOR[match[1].toLowerCase()]
+  if (!vendor) return null
+  const rest = match[2]
+  const parsed: ParsedConnection = { vendor }
+
+  if (rest.includes(";")) {
+    const [hostPart, ...params] = rest.split(";")
+    const hostPort = hostPart.split("\\")[0]
+    const comma = hostPort.indexOf(",")
+    if (comma >= 0 && /^\d+$/.test(hostPort.slice(comma + 1).trim())) {
+      if (hostPort.slice(0, comma).trim()) parsed.host = hostPort.slice(0, comma).trim()
+      parsed.port = hostPort.slice(comma + 1).trim()
+    } else if (hostPort.trim()) {
+      parsed.host = hostPort.trim()
+    }
+    for (const param of params) {
+      const eq = param.indexOf("=")
+      if (eq < 0) continue
+      const key = param.slice(0, eq).trim().toLowerCase()
+      const value = param.slice(eq + 1).trim()
+      if (!value) continue
+      if (key === "databasename" || key === "database") parsed.database = value
+      else if (key === "user id" || key === "user" || key === "username" || key === "uid")
+        parsed.username = value
+      else if (key === "password" || key === "pwd") parsed.password = value
+      else if (key === "port") parsed.port = value
+    }
+  } else {
+    try {
+      const url = new URL(withoutJdbc)
+      if (url.username) parsed.username = safeDecode(url.username)
+      if (url.password) parsed.password = safeDecode(url.password)
+      if (url.hostname) parsed.host = url.hostname
+      if (url.port) parsed.port = url.port
+      if (url.pathname.length > 1) parsed.database = safeDecode(url.pathname.slice(1))
+    } catch {
+      const noQuery = rest.split("?")[0]
+      const at = noQuery.lastIndexOf("@")
+      const userinfo = at >= 0 ? noQuery.slice(0, at) : null
+      const hostPart = at >= 0 ? noQuery.slice(at + 1) : noQuery
+      if (userinfo) {
+        const colon = userinfo.indexOf(":")
+        if (colon >= 0) {
+          if (userinfo.slice(0, colon)) parsed.username = safeDecode(userinfo.slice(0, colon))
+          if (userinfo.slice(colon + 1)) parsed.password = safeDecode(userinfo.slice(colon + 1))
+        } else {
+          parsed.username = safeDecode(userinfo)
+        }
+      }
+      const slash = hostPart.indexOf("/")
+      const hostPort = slash >= 0 ? hostPart.slice(0, slash) : hostPart
+      if (slash >= 0 && hostPart.slice(slash + 1))
+        parsed.database = safeDecode(hostPart.slice(slash + 1))
+      const colon = hostPort.lastIndexOf(":")
+      if (colon >= 0 && /^\d+$/.test(hostPort.slice(colon + 1))) {
+        parsed.port = hostPort.slice(colon + 1)
+        if (hostPort.slice(0, colon)) parsed.host = hostPort.slice(0, colon)
+      } else if (hostPart) {
+        parsed.host = hostPart
+      }
+    }
+  }
+  return parsed
+}
+
+function buildConnectionUrl(
+  vendor: DatabaseType,
+  fields: Pick<FormState, "host" | "port" | "database" | "username" | "password">,
+): string {
+  const { host, port, database, username, password } = fields
+  if (!host.trim()) return ""
+  let url = `${VENDOR_TO_SCHEME[vendor]}://`
+  if (username.trim()) url += encodeURIComponent(username.trim())
+  if (password) url += `:${encodeURIComponent(password)}`
+  if (username.trim() || password) url += "@"
+  url += host.trim()
+  if (port.trim()) url += `:${port.trim()}`
+  if (database.trim()) url += `/${database.trim()}`
+  return url
 }
 
 /** Field errors straight from the shared zod schema (mirrors the backend contract). */
@@ -71,16 +194,40 @@ export function RegisterDatabaseDialog({
   const vendorMeta = getVendor(vendor)
 
   const setField = (key: keyof FormState, value: string) => {
-    setForm((f) => ({ ...f, [key]: value }))
-    if (touchedSubmit) setErrors(computeErrors({ ...form, [key]: value }))
+    let next: FormState = { ...form, [key]: value }
+    if (key !== "connectionString" && key !== "databaseName" && key !== "description") {
+      // keep the connection URL in sync whenever a connection field changes
+      next = { ...next, connectionString: buildConnectionUrl(vendor, next) }
+    }
+    setForm(next)
+    if (touchedSubmit) setErrors(computeErrors(next))
+  }
+
+  const setConnectionString = (value: string) => {
+    const parsed = parseConnectionUrl(value)
+    if (parsed?.vendor && parsed.vendor !== vendor) setVendor(parsed.vendor)
+    const next: FormState = { ...form, connectionString: value }
+    if (parsed) {
+      if (parsed.host !== undefined) next.host = parsed.host
+      if (parsed.port !== undefined) next.port = parsed.port
+      if (parsed.database !== undefined) next.database = parsed.database
+      if (parsed.username !== undefined) next.username = parsed.username
+      if (parsed.password !== undefined) next.password = parsed.password
+      if (!parsed.port && !form.port.trim())
+        next.port = String(getVendor(parsed.vendor ?? vendor).defaultPort)
+    }
+    setForm(next)
+    if (touchedSubmit) setErrors(computeErrors(next))
   }
 
   const selectVendor = (next: DatabaseType) => {
     if (next === vendor) return
     setVendor(next)
     // Vendor-specific connection state resets; identity fields carry over.
-    setForm((f) => ({ ...f, port: "" }))
-    setErrors(computeErrors({ ...form, port: "" }))
+    const nextForm = { ...form, port: "" }
+    nextForm.connectionString = buildConnectionUrl(next, nextForm)
+    setForm(nextForm)
+    setErrors(computeErrors(nextForm))
   }
 
   const submit = async () => {
@@ -93,7 +240,7 @@ export function RegisterDatabaseDialog({
     try {
       const payload: RegisterDatabaseRequest = {
         database_name: form.databaseName.trim(),
-        description: form.description.trim() || undefined,
+        description: form.description.trim() || null,
         creds: {
           host: form.host.trim(),
           database_type: vendor,
@@ -220,6 +367,23 @@ export function RegisterDatabaseDialog({
                   noValidate
                 >
                   <div className="grid gap-4 @[512px]:grid-cols-2">
+                    <Field
+                      id="connectionUrl"
+                      label="Connection URL"
+                      className="col-span-full"
+                      hint="Optional — paste a connection string to auto-fill the fields. Editing a field updates the URL."
+                    >
+                      <Input
+                        id="connectionUrl"
+                        name="connectionUrl"
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={form.connectionString}
+                        onChange={(e) => setConnectionString(e.target.value)}
+                        placeholder={`${VENDOR_TO_SCHEME[vendor]}://user:password@host:port/database`}
+                        className="h-10 font-mono"
+                      />
+                    </Field>
                     <Field id="databaseName" label="Display name" hint="Lowercase letters and numbers" error={errors.databaseName}>
                       <Input
                         id="databaseName"

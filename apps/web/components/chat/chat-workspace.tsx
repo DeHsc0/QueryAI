@@ -7,9 +7,8 @@ import type { ChatStreamEvent, Conversation, DatabaseSummary, SqlResultRow, Turn
 import {
   ApiError,
   createConversation,
+  getDatabaseConversations,
   getTurns,
-  listConversations,
-  listDatabases,
   streamChat,
 } from "@/lib/api"
 import { Logo } from "@/components/landing/logo"
@@ -67,24 +66,23 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
     el.scrollTop = el.scrollHeight
   }, [messages, loadingHistory, activeId])
 
-  // initial load: database metadata + conversation list
+  // initial load: database + its conversations, in one request
   useEffect(() => {
     const t = setTimeout(() => {
       ;(async () => {
         try {
-          const dbs = await listDatabases()
-          setDbMeta(dbs.find((d) => d.id === databaseId) ?? null)
+          const loaded = await getDatabaseConversations(databaseId)
+          setDbMeta(loaded.database)
+          backendConversationIdsRef.current = new Set(
+            loaded.conversations.map((c) => c.thread_id)
+          )
+          setConversations(loaded.conversations.map(toSidebarItem))
         } catch {
+          // 404 or fetch failure: no database or nothing to restore
           setDbMeta(null)
+          setConversations([])
         } finally {
           setDbLoading(false)
-        }
-        try {
-          const loaded = await listConversations(databaseId)
-          backendConversationIdsRef.current = new Set(loaded.map((c) => c.thread_id))
-          setConversations(loaded.map(toSidebarItem))
-        } catch {
-          setConversations([])
         }
       })()
     }, 0)

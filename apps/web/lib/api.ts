@@ -4,14 +4,14 @@
  * Database, conversation, and turn endpoints talk to the real FastAPI backend
  * (Clerk Bearer auth, every response validated with zod — see lib/schemas.ts).
  * The chat send pipeline consumes the backend's real SSE stream from
- * POST /api/chat; the dashboard Edit/Delete dialogs are still mock-backed
- * until the backend PATCH/DELETE endpoints exist.
+ * POST /api/chat; the dashboard Edit dialog is still mock-backed
+ * until the backend PATCH endpoint exists.
  */
 
 import axios from "axios"
 import { z } from "zod"
 import {
-  conversationsResponseSchema,
+  databaseWithConversationsResponseSchema,
   databaseResponseSchema,
   databasesResponseSchema,
   registerDatabaseRequestSchema,
@@ -20,6 +20,7 @@ import {
 import type {
   Conversation,
   CreateConversationRequest,
+  DatabaseWithConversations,
   ChatRequest,
   ChatStreamEvent,
   DatabaseSummary,
@@ -104,7 +105,7 @@ function parse<T>(schema: z.ZodType<T>, payload: unknown, endpoint: string): T {
 //  Conversations + turns
 //
 //  Real backend contracts:
-//    GET /api/conversation/{db_id}             → { data: [{ id, title }] }
+//    GET /api/conversation/{db_id}             → { data: { database, conversations: [{ id, title, created_at }] } }
 //    GET /api/turns/{db_id}/{conversation_id}  → { data: [turn…] } (5 newest,
 //        newest-first — reordered chronologically below)
 //
@@ -115,10 +116,24 @@ function parse<T>(schema: z.ZodType<T>, payload: unknown, endpoint: string): T {
 
 const turnsStore: Map<string, Turn[]> = new Map()
 
-export async function listConversations(dbId: string): Promise<Conversation[]> {
+/**
+ * Loads the owning database alongside its conversations in one request — the
+ * workspace needs both on arrival, and this replaces the old
+ * listDatabases + listConversations double fetch.
+ */
+export async function getDatabaseConversations(dbId: string): Promise<DatabaseWithConversations> {
   const resp = await api.get(`/api/conversation/${dbId}`).catch(fail)
-  const body = parse(conversationsResponseSchema, resp.data, "GET /api/conversation")
-  return body.data.map((c) => ({ thread_id: c.id, title: c.title, database_id: dbId }))
+  const body = parse(databaseWithConversationsResponseSchema, resp.data, "GET /api/conversation")
+  return {
+    // GET omits dense_schema (schema indexing runs async after creation).
+    database: { ...body.data.database, dense_schema: body.data.database.dense_schema ?? null },
+    conversations: body.data.conversations.map((c) => ({
+      thread_id: c.id,
+      title: c.title,
+      database_id: dbId,
+      created_at: c.created_at,
+    })),
+  }
 }
 
 export async function getTurns(dbId: string, conversationId: string): Promise<Turn[]> {
@@ -534,12 +549,12 @@ function generateTitle(query: string): string {
 }
 
 // ──────────────────────────────────────────
-//  Dashboard Edit/Delete — client-local stand-ins
+//  Dashboard Edit — client-local stand-in
 //
-//  The backend does not expose PATCH/DELETE on /api/database yet, so these
-//  return the patched/deleted result locally without persisting. They take
-//  the current DatabaseSummary because the real list no longer shares state
-//  with a mock store.
+//  The backend does not expose PATCH on /api/database yet, so this returns
+//  the patched result locally without persisting. It takes the current
+//  DatabaseSummary because the real list no longer shares state with a mock
+//  store.
 // ──────────────────────────────────────────
 
 export async function updateDatabase(
@@ -554,7 +569,6 @@ export async function updateDatabase(
   }
 }
 
-export async function deleteDatabase(db: DatabaseSummary): Promise<void> {
-  void db
-  await delay(900)
+export async function deleteDatabase(dbId: string): Promise<void> {
+  await api.delete(`/api/database/${dbId}`).catch(fail)
 }

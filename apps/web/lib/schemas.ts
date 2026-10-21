@@ -30,7 +30,7 @@ export const registerDatabaseRequestSchema = z.object({
     .string()
     .trim()
     .regex(/^[a-z0-9]+$/, "Lowercase letters and numbers only."),
-  description: z.string().trim().optional(),
+  description: z.string().trim().nullish(),
   creds: credentialsSchema,
 })
 
@@ -50,10 +50,11 @@ export const databaseSummarySchema = z.object({
   dense_schema: z.string().nullable().optional(),
 })
 
-/** What GET /api/conversation/{db_id} returns per item: { id, title }. */
+/** What GET /api/conversation/{db_id} returns per conversation: { id, title, created_at }. */
 export const conversationSchema = z.object({
   id: z.string(),
   title: z.string(),
+  created_at: z.string(),
 })
 
 /** What GET /api/turns/{db_id}/{conversation_id} returns per turn (models.py Turns). */
@@ -76,8 +77,12 @@ export const databaseResponseSchema = z.object({
   data: databaseSummarySchema,
 })
 
-export const conversationsResponseSchema = z.object({
-  data: z.array(conversationSchema),
+/** GET /api/conversation/{db_id} — the owning database plus all its conversations, in one response. */
+export const databaseWithConversationsResponseSchema = z.object({
+  data: z.object({
+    database: databaseSummarySchema,
+    conversations: z.array(conversationSchema),
+  }),
 })
 
 export const turnsResponseSchema = z.object({

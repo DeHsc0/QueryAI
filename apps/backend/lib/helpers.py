@@ -157,4 +157,5 @@ def store_schema ( creds : Creds ):
 
         db_dense_schema = "".join(db_dense_schema)
 
+
     return schema , db_dense_schema
