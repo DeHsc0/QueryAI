@@ -23,7 +23,11 @@ class User(SQLModel , table=True):
     username : str = Field( unique=True) 
     clerk_id : str = Field( index=True , unique=True )
     email : str = Field( unique=True )
-    databases : List[ "UserDatabases" ] = Relationship( back_populates="user" )
+    databases : List[ "UserDatabases" ] = Relationship( back_populates="user" , sa_relationship_kwargs={
+
+        "cascade" : "all, delete-orphan"
+
+    } )
     created_at : datetime = Field( default_factory = lambda : datetime.now() ,  sa_type=DateTime(timezone=False) , nullable=False)
     updated_at : datetime = Field(default_factory = lambda : datetime.now() , sa_type=DateTime(timezone=False) , sa_column_kwargs={"onupdate" : lambda : datetime.now() })
 
@@ -33,14 +37,18 @@ class UserDatabases( SQLModel , table=True ):
     __tablename__ = "user_databases"
 
     id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True )
-    user_clerk_id : str = Field( foreign_key="users.clerk_id" , index=True )
+    user_clerk_id : str = Field( foreign_key="users.clerk_id" , index=True , nullable=False)
     encrypted_creds : str = Field()
     database_name : str = Field( index=True) 
     database_soft : str = DatabaseTypes
     description : str = Field()
     dense_schema : str = Field()
     user : Optional["User"] = Relationship( back_populates="databases")
-    conversations : List["Conversations"] = Relationship( back_populates="user_database" )
+    conversations : List["Conversations"] = Relationship( back_populates="user_database" , sa_relationship_kwargs={
+
+        "cascade" : "all, delete-orphan"
+
+    })
     created_at : datetime = Field( default_factory = lambda : datetime.now() ,  sa_type=DateTime(timezone=False) , nullable=False)
     updated_at : datetime = Field(default_factory = lambda : datetime.now() , sa_type=DateTime(timezone=False) , sa_column_kwargs={"onupdate" : lambda : datetime.now() })
     
@@ -51,9 +59,13 @@ class Conversations( SQLModel , table=True):
     __tablename__ = "conversations"
 
     id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True)
-    database_id : uuid.UUID = Field( foreign_key="user_databases.id" , index=True)
+    database_id : uuid.UUID = Field( foreign_key="user_databases.id" , index=True , nullable=False)
     user_database: UserDatabases = Relationship(back_populates="conversations")
-    turns : List[Turns] = Relationship( back_populates="conversation")
+    turns : List[Turns] = Relationship( back_populates="conversation" , sa_relationship_kwargs={
+
+        "cascade" : "all, delete-orphan"
+
+    })
     title : str = Field()
     created_at : datetime = Field( default_factory = lambda : datetime.now() ,  sa_type=DateTime(timezone=False) , nullable=False)
     updated_at : datetime = Field(default_factory = lambda : datetime.now() , sa_type=DateTime(timezone=False) , sa_column_kwargs={"onupdate" : lambda : datetime.now() })
@@ -64,7 +76,7 @@ class Turns ( SQLModel , table=True ):
     __tablename__ = "turns" 
 
     id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True)
-    conversation_id : uuid.UUID = Field( foreign_key="conversations.id" , index=True )
+    conversation_id : uuid.UUID = Field( foreign_key="conversations.id" , index=True , nullable=False)
     conversation : Conversations = Relationship( back_populates="turns")
     user_query : str 
     sql_query : Optional[List[str]] = Field(default=None, sa_column=Column(ARRAY(String)))
