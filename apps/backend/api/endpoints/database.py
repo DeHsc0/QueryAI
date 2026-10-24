@@ -2,16 +2,16 @@
 from fastapi import APIRouter
 from fastapi import Request , Depends
 from fastapi.responses import JSONResponse
-from schemas import Database_Creation
-from lib.helpers import encrypt_credentials , decrypt_credentials , store_schema 
+from schemas import Database_Creation 
+from lib.helpers import encrypt_credentials , store_schema
 from db.dependency import get_db
 from db.models import UserDatabases
 import json
-from lib.config import get_qdrant_client
 from sqlmodel import Session, select
 from task_queue.tasks import ingest_schema
-from lib.config import get_redis_client , get_qdrant_client 
+from lib.config import get_qdrant_client 
 from qdrant_client import models  
+import os 
 
 router = APIRouter() 
 
@@ -112,7 +112,7 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
         session.refresh(database)
 
     except Exception as e: 
-        return JSONResponse(content={ "message" : "unable to register the database"  } , status_code=301 )
+        return JSONResponse(content={ "message" : "unable to register the database" , "message" : str(e) } , status_code=301 )
 
     ingest_schema.delay(json.dumps({ "schema_str" : schema , "user_id" : user_id , "db_id" : str(database.id) }))
     
@@ -135,19 +135,20 @@ async def delete_database( req : Request , db_id : str , session : Session = Dep
 
         user_id : str = req.state.clerk.get("sub")
 
-        user_db = session.exec( select( UserDatabases ).where( UserDatabases.id == db_id , UserDatabases.user_clerk_id  == user_id) )
+        user_db = session.exec( select( UserDatabases ).where( UserDatabases.id == db_id , UserDatabases.user_clerk_id  == user_id) ).first()
 
         if not user_db: 
             return JSONResponse(content={ "message" : "Database Dosent exists"} , status_code=301)
 
-        delete_user_db = session.delete(user_db)
+        session.delete(user_db)
+        session.commit()
 
         qdrant = get_qdrant_client()
 
         tenant_id = f"{user_id}__{db_id}"
 
         delete = qdrant.delete(
-            collection_name="your_collection_name",
+            collection_name=os.getenv("QDRANT_COLLECTION"),
             points_selector=models.FilterSelector(
                 filter=models.Filter(
                     must=[
@@ -161,11 +162,9 @@ async def delete_database( req : Request , db_id : str , session : Session = Dep
             wait=True,  
         )
 
-        print("\n\n Delete \n\n" , delete , "\n\n\n\n")
-
         return JSONResponse(content={ "message" : "Successfully deleted the registered database."})
 
     except Exception as e: 
-        return JSONResponse(content={ "message" : "Unable to delete the registered database."} , status_code=500)
+        return JSONResponse(content={ "message" : "Unable to delete the registered database." , "error" : str(e)} , status_code=500)
 
     

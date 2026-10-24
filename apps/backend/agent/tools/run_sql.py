@@ -1,12 +1,11 @@
 from langchain.tools import tool , ToolRuntime
-from sqlmodel import Session , text
+from sqlmodel import text
 from sqlalchemy.engine.cursor import CursorResult
 from lib.helpers import decrypt_credentials , get_user_db
 from schemas import Creds
 import json
-from typing import Dict
 from decimal import Decimal 
-from sqlglot import parse_one , ParseError , parse , expressions as exp 
+from sqlglot import ParseError , parse , expressions as exp 
 from pydantic import BaseModel , Field
 
 MAX_ROWS = 50 

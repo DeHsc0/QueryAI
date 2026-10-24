@@ -4,8 +4,7 @@ from fastapi.responses import JSONResponse
 from db.dependency import get_db
 from db.models import UserDatabases , Conversations
 from fastapi import Depends 
-from sqlmodel import Session , select
-from schemas import ChatCreation
+from sqlmodel import select
 
 router = APIRouter()
 

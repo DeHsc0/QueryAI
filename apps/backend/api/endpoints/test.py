@@ -1,18 +1,13 @@
 from fastapi import APIRouter , Request 
-from pydantic import BaseModel 
-from sqlglot import parse_one , ParseError
-from task_queue.tasks import insert_chats_in_db , memory_write
+from pydantic import BaseModel , Field
 from fastapi.responses import JSONResponse
-import json
 from sqlmodel import Session , text
 from sqlalchemy.engine.cursor import CursorResult
 from lib.helpers import get_user_db , decrypt_credentials
 from schemas import Creds
-import json
-from typing import Dict
 from decimal import Decimal 
-from sqlglot import parse_one , ParseError , parse , expressions as exp 
-from pydantic import BaseModel , Field
+from sqlglot import ParseError , parse , expressions as exp 
+import json
 
 
 class Run_Sql_Query(BaseModel):
@@ -75,8 +70,6 @@ def run_sql( query : str , dialect : str = "postgres" , encrypted_creds : str = 
         
         stmts = parse( query , read=dialect)
 
-        print("\nStatement : \n" , stmts)
-
     except ParseError as e:
         return f"Invalid SQL syntax: {e}"
 
@@ -115,8 +108,6 @@ def run_sql( query : str , dialect : str = "postgres" , encrypted_creds : str = 
 
         final_result = json.dumps(temp_res)
 
-    print(final_result)
-
     return final_result
 
 router = APIRouter()
@@ -136,8 +127,6 @@ WHERE s.snrratio IS NOT NULL
 GROUP BY o.weathprofile
 ORDER BY avg_snqi DESC;
 """)
-
-    print(result)
 
     return JSONResponse(content={"data" : ""})
 

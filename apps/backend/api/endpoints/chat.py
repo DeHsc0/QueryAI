@@ -6,14 +6,12 @@ from langchain_core.messages import HumanMessage , AIMessage , ToolMessage , Sys
 from agent.init import Context
 from app_state import AppState
 from task_queue.tasks import insert_chats_in_db , Turn_data
-from typing import  Any , List , Optional , Dict
+from typing import  List , Optional
 from dataclasses import dataclass
 from sqlmodel import Session , select
 from db.models import Conversations , Turns , UserDatabases 
 from fastapi import Depends 
 from db.dependency import get_db
-from app_state import AppState
-from langgraph.checkpoint.redis import AsyncRedisSaver
 from lib.config import get_redis_client
 import json 
 from agent.memory.long import mem0
@@ -43,8 +41,6 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
     current_msg = []
 
     raw_db_data = redis.json().get(f"db_data:{user_id}:{data.db_id}")
-
-    print("\n\n\n\n\n\n\n\n\n\n" , raw_db_data , "\n\n\n\n\n\n\n\n\n\n")
 
     db_data = json.loads(raw_db_data) if isinstance(raw_db_data , str) else raw_db_data      
 
@@ -156,16 +152,10 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
         new_convo_id = conversation.id 
 
-        print("\n\n\n New Conversation Created :" , new_convo_id , "\n\n\n")
-
     else:
 
         t = await state.checkpointer.aget_tuple({"configurable": {"thread_id": str(data.conversation_id)}})
         messages = t.checkpoint["channel_values"].get("messages", []) if t else []
-
-        print("\n\n T: \n\n" , t , "\n\n\n\n\n\n\n\n")
-
-        print("\n\n messages: \n\n" , messages , "\n\n\n\n\n\n\n\n")
 
         if not messages:
             try:
@@ -289,15 +279,9 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
 
                         if isinstance(tool_data , ToolMessage):
 
-                            print("gonna yield the tool message data ")
-
                             for calls in tool_calls: 
 
                                 if tool_data.tool_call_id == calls.call_id: 
-
-                                    print("Data without content \n\n" , chunk_data["tools"]["messages"][0] , "\n\n")
-
-                                    print(" DAta got from content \n\n" , chunk_data["tools"]["messages"][0].content , "\n\n")
 
                                     yield f"data: {json.dumps({"type" : "tool_result" , "data" : json.dumps(chunk_data["tools"]["messages"][0].content ) , "conversation_id" : str(new_convo_id if new_convo_id else data.conversation_id) }) } \n\n"
 

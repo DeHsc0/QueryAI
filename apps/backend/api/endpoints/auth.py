@@ -1,4 +1,3 @@
-from fastapi import Request 
 from fastapi import Request , HTTPException , Depends
 from fastapi.security import HTTPBearer
 from fastapi.responses import JSONResponse
@@ -32,8 +31,6 @@ async def auth (req : Request , session : Session = Depends(get_db)):
     #     "svix-signature": req.headers.get("svix-signature"),
     # }
 
-    print("\n\n\n Payload : " , payload , "\n\n\n")
-
     try:
 
         Webhook(WEBHOOK_SECRET).verify(payload, headers)
@@ -43,12 +40,8 @@ async def auth (req : Request , session : Session = Depends(get_db)):
 
     event = json.loads(payload)
 
-    print("\n\n\nEvent : " , event , "\n\n\n")
-    
     event_type = event["type"]
     event_data = event["data"]
-
-    print("Event_type : " , event_type)
 
     clerk_id = event_data["id"]
 

@@ -1,7 +1,5 @@
 from qdrant_client import QdrantClient , models  
-from langchain_qdrant import QdrantVectorStore
 import os 
-from langchain_qdrant import FastEmbedSparse , RetrievalMode
 from dotenv import load_dotenv
 from redis import Redis
 

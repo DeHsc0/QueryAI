@@ -49,8 +49,6 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch ( self , req : Request , call_next  ): 
 
         public_paths = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/auth/webhook" }
-
-        print(req.url.path)
         
         if req.url.path in public_paths:
         
@@ -74,10 +72,6 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
                 )
 
             )
-
-            print("IS Signed in :" , req_state.is_signed_in)
-
-            print("IS Authenticated :" , req_state.is_authenticated)
 
             if not req_state.is_signed_in or not req_state.is_authenticated: 
                 return JSONResponse(

@@ -2,19 +2,12 @@
 from cryptography.fernet import Fernet
 import os , json
 from sqlalchemy.engine import URL
-from sqlalchemy import Engine
 from dotenv import load_dotenv
-from sqlmodel import create_engine , inspect 
+from sqlmodel import create_engine , inspect
 from schemas import Creds
 from typing import Dict
-from lib.config import get_qdrant_client
-from qdrant_client import models 
-from uuid import uuid4
-from langchain_core.documents import Document 
 from typing import List
-from sqlmodel import Session , select
-from db.dependency import engine
-from db.models import UserDatabases
+from sqlmodel import Session
 from contextlib import contextmanager
 
 load_dotenv() 
@@ -66,8 +59,6 @@ def get_user_db (creds : Creds) :
         port=creds.port
         
     )
-
-    print("\n\n\n\n DB URL" , db_url , "\n\n\n\n")
 
     engine = create_engine( url=db_url , pool_pre_ping=True)
 
