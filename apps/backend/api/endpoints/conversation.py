@@ -5,9 +5,9 @@ from db.dependency import get_db
 from db.models import UserDatabases , Conversations
 from fastapi import Depends 
 from sqlmodel import select
+from lib.helpers import SAMPLE_DB
 
 router = APIRouter()
-
 
 @router.get("/{db_id}")
 def get_conversation(req:Request , db_id : str , session = Depends(get_db)): 
@@ -50,6 +50,9 @@ def get_conversation(req:Request , db_id : str , session = Depends(get_db)):
                 {"id": str(cid), "title": ctitle, "created_at": str(ccreated)}
                 for cid, ctitle, ccreated in rows
             ],
+
+            "questions" : SAMPLE_DB.get(db_row.database_name) if db_row.database_name in SAMPLE_DB else None
+
         }})
 
     except Exception as e : 

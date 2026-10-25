@@ -12,6 +12,43 @@ from contextlib import contextmanager
 
 load_dotenv() 
 
+SAMPLE_DB = {
+  "solar_panel": [
+    "What's the downtime score for 'Solar Plant West Davidport'?",
+    "What's the potential financial hit from our risky plants?",
+    "For snapshot PV945724, what's its performance if we adjust for temperature?",
+    "For the maintenance event PV937101, what's the ratio of cost to revenue impact?",
+    "How many of our plants are real lemons, both running inefficiently and breaking down all the time?"
+  ],
+  "polar_equipment": [
+    "Show me the equipment type, equipment code, overall efficiency, safety index, their ranks, and how much those ranks differ across equipment. Sort the results.",
+    "Could you identify all equipment that are fit for harsh weather in our polar database? Show me the equipment, heater status, insulation status, emergency light status, the structure margin, and their readiness label.",
+    "For our polar safety assessment, I need to evaluate the safety equipment's reliability. Please provide a report showing the equipment code, equipment type, life support status, reliability score, reliability classification. Also include a JSON summary of oxygen status , medical status, and safety system status as support systems status. Focus only on safety equipment and sort the results.",
+    "Provide the location type, station name, number of equipment at each station, how much they rely on renewables, total renewable power, and their classification. Only include equipment that has measurable solar or wind output data, and sort the results.",
+    "For each combination of station name and zone type, I need to see station names, zone type, average water quality indices, average WRMI scores, count of systems that need water-saving, classification, and management situation. Group and sort results."
+  ],
+  "museum_artifact": [
+    "Show me a report on our most important artifacts that are at risk.",
+    "Find artifacts with a high ERF. Show the artifact ID, name, the score, and a summary of sensitivities. Only show if the score is high.",
+    "I need a conservation report for 'Ming' and 'Qing' artifacts. Show the artifact information, its CPI score, and the priority level.",
+    "Show dynasty, importance, and budget info for artifacts.",
+    "I need a report on artifacts at risk of accelerated deterioration. Show the artifact ID, name, current temp and humidity, number of high sensitivities, and whether it is at high risk. I want to see all artifacts."
+  ],
+  "archeology_scan": [
+    "I'd like to see a quality assessment of scans across our archaeological sites. Show site code, site name, scan quality for each site and rank them.",
+    "Could you help me find archaeological sites that might need urgent conservation attention? I'm particularly interested in identifying sites in Risk Zones. For each site, I'd like to see their code, name, structural condition, and status, along with their risk category.",
+    "I'm planning our upcoming archaeological scanning sessions and want to understand which sites have the most suitable environments. Could you show me a report with each location's ID, name, and its average scanning suitability? This would help us prioritize places for scanning.",
+    "I'm evaluating the quality of our registrations and would like to understand which ones are most reliable. Could you show me the accuracy ratio and confidence levels for each registration? I'd need to see the registration ID, project ID, accuracy measurements, error values, calculated ratio, and what confidence level that translates to.",
+    "For our archaeological site evaluation, I need to quantify the preservation metrics across our collection. Please compute a quality index for each location. Present the results in descending order of quality values, displaying only the site code, site designation, and calculated value to facilitate prioritization of our digital preservation resources."
+  ],
+  "households": [
+    "Find the typical bathroom ratio for each area. Show the area code and the average ratio.",
+    "Where is the highest concentration of high-risk families?",
+    "Give me the IDs of families that are both receiving aid and have a lot of vehicles.",
+    "How many apartments qualify for the Space Bonus with more than 20 square meters per resident?",
+    "Show me a list of our most well-off, largest households."
+  ]
+}
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 

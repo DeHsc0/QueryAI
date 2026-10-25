@@ -1,4 +1,4 @@
-from pydantic import BaseModel , Field
+from pydantic import BaseModel , Field , model_validator
 from typing import Literal , Optional
 
 class Creds(BaseModel):
@@ -18,10 +18,22 @@ class Creds(BaseModel):
 
 class Database_Creation(BaseModel):
     database_name : str = Field(
-        pattern=r"^[a-z0-9]+$"
+        pattern=r"^[a-z0-9_]+$"
     )
+    sample_db : Optional[str]
     description : Optional[str]
-    creds : Creds
+    creds : Optional[Creds]
+
+    @model_validator(mode="after")
+    def validate_database_source(self):
+
+        if (self.sample_db is None) == (self.creds is None):
+      
+            raise ValueError(
+                "Please provide either 'sample_db' or 'creds'"
+            )
+
+        return self
 
 class Chat(BaseModel): 
     query : str

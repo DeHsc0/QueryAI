@@ -37,9 +37,9 @@ class UserDatabases( SQLModel , table=True ):
     __tablename__ = "user_databases"
 
     id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True )
-    user_clerk_id : str = Field( foreign_key="users.clerk_id" , index=True , nullable=False)
+    user_clerk_id : str = Field( foreign_key="users.clerk_id" , index=True , nullable=False , ondelete="CASCADE")
     encrypted_creds : str = Field()
-    database_name : str = Field( index=True) 
+    database_name : str = Field(index=True) 
     database_soft : str = DatabaseTypes
     description : str = Field()
     dense_schema : str = Field()
@@ -49,6 +49,7 @@ class UserDatabases( SQLModel , table=True ):
         "cascade" : "all, delete-orphan"
 
     })
+    sample_db : bool = Field()
     created_at : datetime = Field( default_factory = lambda : datetime.now() ,  sa_type=DateTime(timezone=False) , nullable=False)
     updated_at : datetime = Field(default_factory = lambda : datetime.now() , sa_type=DateTime(timezone=False) , sa_column_kwargs={"onupdate" : lambda : datetime.now() })
     
@@ -59,7 +60,7 @@ class Conversations( SQLModel , table=True):
     __tablename__ = "conversations"
 
     id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True)
-    database_id : uuid.UUID = Field( foreign_key="user_databases.id" , index=True , nullable=False)
+    database_id : uuid.UUID = Field( foreign_key="user_databases.id" , index=True , nullable=False , ondelete="CASCADE")
     user_database: UserDatabases = Relationship(back_populates="conversations")
     turns : List[Turns] = Relationship( back_populates="conversation" , sa_relationship_kwargs={
 
@@ -76,7 +77,7 @@ class Turns ( SQLModel , table=True ):
     __tablename__ = "turns" 
 
     id : uuid.UUID = Field( default_factory=uuid.uuid4 , primary_key=True)
-    conversation_id : uuid.UUID = Field( foreign_key="conversations.id" , index=True , nullable=False)
+    conversation_id : uuid.UUID = Field( foreign_key="conversations.id" , index=True , nullable=False , ondelete="CASCADE")
     conversation : Conversations = Relationship( back_populates="turns")
     user_query : str 
     sql_query : Optional[List[str]] = Field(default=None, sa_column=Column(ARRAY(String)))
