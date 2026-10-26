@@ -133,6 +133,7 @@ export async function getDatabaseConversations(dbId: string): Promise<DatabaseWi
       database_id: dbId,
       created_at: c.created_at,
     })),
+    questions: body.data.questions ?? [],
   }
 }
 
@@ -172,8 +173,27 @@ export async function registerDatabase(
 ): Promise<DatabaseSummary> {
   // Shaped exactly for the backend Database_Creation schema before it leaves
   // the client, so a bad submission fails here instead of as a 422.
-  const payload = registerDatabaseRequestSchema.parse(request)
+  // sample_db must be sent (as null) too: the backend field has no default.
+  const payload = { ...registerDatabaseRequestSchema.parse(request), sample_db: null }
   const resp = await api.post("/api/database", payload).catch(fail)
+  const body = parse(databaseResponseSchema, resp.data, "POST /api/database")
+  return { ...body.data, dense_schema: body.data.dense_schema ?? null }
+}
+
+/**
+ * Registers one of the backend's built-in sample databases. The backend
+ * supplies the connection, so no credentials leave the client; it returns the
+ * same summary shape as a custom registration.
+ */
+export async function registerSampleDatabase(sampleId: string): Promise<DatabaseSummary> {
+  const resp = await api
+    .post("/api/database", {
+      database_name: sampleId,
+      sample_db: sampleId,
+      description: null,
+      creds: null,
+    })
+    .catch(fail)
   const body = parse(databaseResponseSchema, resp.data, "POST /api/database")
   return { ...body.data, dense_schema: body.data.dense_schema ?? null }
 }

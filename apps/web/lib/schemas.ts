@@ -82,6 +82,7 @@ export const databaseWithConversationsResponseSchema = z.object({
   data: z.object({
     database: databaseSummarySchema,
     conversations: z.array(conversationSchema),
+    questions: z.array(z.string()).nullable().optional(),
   }),
 })
 

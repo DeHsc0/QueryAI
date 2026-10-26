@@ -3,7 +3,7 @@ from typing import List , Optional
 from sqlalchemy.dialects.postgresql import ARRAY 
 from sqlalchemy import DateTime
 from dotenv import load_dotenv
-from sqlmodel import SQLModel , Field , Relationship , create_engine , func , Enum , Column , String  
+from sqlmodel import SQLModel , Field , Relationship , create_engine , Enum , Column , String  
 import os , uuid 
 from datetime import datetime
 
@@ -41,7 +41,7 @@ class UserDatabases( SQLModel , table=True ):
     encrypted_creds : str = Field()
     database_name : str = Field(index=True) 
     database_soft : str = DatabaseTypes
-    description : str = Field()
+    description : Optional[str] = Field()
     dense_schema : str = Field()
     user : Optional["User"] = Relationship( back_populates="databases")
     conversations : List["Conversations"] = Relationship( back_populates="user_database" , sa_relationship_kwargs={

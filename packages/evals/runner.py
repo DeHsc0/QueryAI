@@ -345,7 +345,6 @@ async def run_evaluation(
 
     cases = load_bird_interact(str(dataset_path), domain=domain, limit=limit)
     if not cases:
-        print(f"No cases found for domain '{domain}' in {dataset_path}")
         return []
 
     for case in cases:
@@ -355,11 +354,7 @@ async def run_evaluation(
     agent, checkpointer = await _get_agent()
     test_cases = []
     try:
-        for index, case in enumerate(cases):
-            print(
-                f"\n[{index + 1}/{len(cases)}] Running agent for: "
-                f"{case.instance_id} — {case.query[:80]}..."
-            )
+        for case in cases:
             result = await _run_agent(agent, case.query, case)
             test_cases.append(build_test_case(case.query, result, case))
     finally:
@@ -369,7 +364,6 @@ async def run_evaluation(
     with_expected_sql = [case for case in test_cases if case.metadata.get("expected_sql")]
     with_expected_tools = [case for case in test_cases if case.expected_tools]
 
-    print(f"\nEvaluating {len(test_cases)} test case(s)...\n")
     _evaluate(
         test_cases,
         get_all_metrics(include_retrieval=False, include_sql=False),

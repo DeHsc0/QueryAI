@@ -1,17 +1,13 @@
 from .main import app 
 from pydantic import BaseModel 
-from typing import Any 
 from db.models import Turns , engine 
-import time
 from sqlmodel import Session
-from sqlalchemy import select 
-from typing import Optional , List , Any 
-from langchain.messages import AnyMessage
+from typing import List , Any 
 import json 
 import os 
 from uuid import uuid4
 from agent.memory.long import mem0
-from lib.helpers import get_qdrant_client
+from lib.config import get_qdrant_client
 from qdrant_client import models 
 
 class Turn_data(BaseModel):

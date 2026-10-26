@@ -12,7 +12,6 @@ from task_queue.tasks import ingest_schema
 from lib.config import get_qdrant_client 
 from qdrant_client import models  
 import os 
-from dataclasses import dataclass
 
 router = APIRouter() 
 

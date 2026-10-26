@@ -19,11 +19,13 @@ export function ChatTranscript({
   messages,
   dbMeta,
   loadingHistory,
+  sampleQuestions,
   onSuggest,
 }: {
   messages: ChatMessage[]
   dbMeta: DatabaseSummary | null
   loadingHistory: boolean
+  sampleQuestions: string[]
   onSuggest: (text: string) => void
 }) {
   const empty = messages.length === 0
@@ -47,7 +49,7 @@ export function ChatTranscript({
             <span className="sr-only">Loading conversation…</span>
           </div>
         ) : empty ? (
-          <EmptyState dbMeta={dbMeta} onSuggest={onSuggest} />
+          <EmptyState dbMeta={dbMeta} sampleQuestions={sampleQuestions} onSuggest={onSuggest} />
         ) : (
           <ol className="flex flex-col gap-6" aria-label="Conversation messages">
             {messages.map((m) => (
@@ -71,12 +73,16 @@ export function ChatTranscript({
 
 function EmptyState({
   dbMeta,
+  sampleQuestions,
   onSuggest,
 }: {
   dbMeta: DatabaseSummary | null
+  sampleQuestions: string[]
   onSuggest: (text: string) => void
 }) {
   const meta = dbMeta ? getVendor(dbMeta.database_soft) : null
+  const isSample = sampleQuestions.length > 0
+  const prompts = isSample ? sampleQuestions.slice(0, 4) : suggestions
   return (
     <div className="flex min-h-[55dvh] flex-col items-center justify-center text-center">
       <span className="grid size-11 place-items-center rounded-xl border border-border bg-elevated text-accent-bright">
@@ -95,7 +101,7 @@ function EmptyState({
       </p>
 
       <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-2 text-left sm:grid-cols-2">
-        {suggestions.map((s) => (
+        {prompts.map((s) => (
           <button
             key={s}
             type="button"
@@ -108,7 +114,9 @@ function EmptyState({
         ))}
       </div>
       <p className="mt-5 text-[11px] text-muted-foreground">
-        Illustrative examples; phrasing works best when it matches the tables in your database.
+        {isSample
+          ? "Sample questions for this database. Pick more from the list above the composer."
+          : "Illustrative examples; phrasing works best when it matches the tables in your database."}
       </p>
     </div>
   )

@@ -1,5 +1,5 @@
 from langchain.tools import tool , ToolRuntime
-from lib.helpers import get_qdrant_client
+from lib.config import get_qdrant_client
 import os
 from qdrant_client import models
 import json 
@@ -108,7 +108,6 @@ def retrieve_context ( query : str ,  runtime : ToolRuntime ):
     return final_result 
     
     
-
 
 
 

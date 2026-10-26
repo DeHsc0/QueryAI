@@ -134,8 +134,13 @@ def store_schema ( creds : Creds ):
                     
                 cols = inspector.get_columns(name)
 
-                db_dense_schema.append(f"T:{name} | cols:{len(cols)}")
+                col_names = []
 
+                for col in cols: 
+                    col_names.append(col.get("name"))
+
+                db_dense_schema.append(f"T:{name} | cols: {" , ".join(col_names)}")
+                
                 foreign_keys = inspector.get_foreign_keys(name)
 
                 if foreign_keys.__len__() > 0: 

@@ -13,7 +13,6 @@ def combine_public_with_gt(public_jsonl_path: str, gt_jsonl_path: str, output_js
     
     # 1. Load ground truth data into a dictionary keyed by instance_id
     gt_data: Dict[str, dict] = {}
-    print(f"Loading ground truth from: {gt_jsonl_path}")
     
     with open(gt_jsonl_path, 'r') as f:
         for line in f:
@@ -25,17 +24,10 @@ def combine_public_with_gt(public_jsonl_path: str, gt_jsonl_path: str, output_js
                 instance_id = gt_entry.get('instance_id')
                 if instance_id:
                     gt_data[instance_id] = gt_entry
-            except json.JSONDecodeError as e:
-                print(f"Error parsing GT line: {e}", file=sys.stderr)
+            except json.JSONDecodeError:
                 continue
     
-    print(f"Loaded {len(gt_data)} ground truth entries")
-    
     # 2. Read public data and merge with GT
-    print(f"Reading public data from: {public_jsonl_path}")
-    combined_count = 0
-    missing_gt_count = 0
-    
     with open(public_jsonl_path, 'r') as f_in, open(output_jsonl_path, 'w') as f_out:
         for line in f_in:
             line = line.strip()
@@ -46,7 +38,6 @@ def combine_public_with_gt(public_jsonl_path: str, gt_jsonl_path: str, output_js
                 instance_id = public_entry.get('instance_id')
                 
                 if not instance_id:
-                    print(f"Warning: Entry missing instance_id, skipping", file=sys.stderr)
                     continue
                 
                 # Merge GT data if available
@@ -65,27 +56,15 @@ def combine_public_with_gt(public_jsonl_path: str, gt_jsonl_path: str, output_js
                         public_entry['follow_up']['sol_sql'] = gt_entry['follow_up'].get('sol_sql', [])
                         public_entry['follow_up']['external_knowledge'] = gt_entry['follow_up'].get('external_knowledge', [])
                         public_entry['follow_up']['test_cases'] = gt_entry['follow_up'].get('test_cases', [])
-                    
-                    combined_count += 1
-                else:
-                    missing_gt_count += 1
-                    print(f"Warning: No GT data found for instance_id: {instance_id}", file=sys.stderr)
                 
                 f_out.write(json.dumps(public_entry) + '\n')
                 
-            except json.JSONDecodeError as e:
-                print(f"Error parsing public data line: {e}", file=sys.stderr)
+            except json.JSONDecodeError:
                 continue
-    
-    print(f"\nCombined {combined_count} entries with ground truth")
-    if missing_gt_count > 0:
-        print(f"Warning: {missing_gt_count} entries had no matching ground truth")
-    print(f"Output written to: {output_jsonl_path}")
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("Usage: python combine_public_with_gt.py <public_jsonl_path> <gt_jsonl_path> <output_jsonl_path>")
         sys.exit(1)
     
     public_path = sys.argv[1]
@@ -93,4 +72,3 @@ if __name__ == "__main__":
     output_path = sys.argv[3]
     
     combine_public_with_gt(public_path, gt_path, output_path)
-

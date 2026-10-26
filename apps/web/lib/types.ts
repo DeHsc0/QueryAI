@@ -65,6 +65,8 @@ export interface CreateConversationRequest {
 export interface DatabaseWithConversations {
   database: DatabaseSummary;
   conversations: Conversation[];
+  /** Suggested questions for sample databases; empty for registered connections. */
+  questions: string[];
 }
 
 // Turn / conversation history — match turns.py + models.py Turns

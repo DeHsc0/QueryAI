@@ -16,6 +16,8 @@ import { VendorIcon } from "@/components/shared/sql-code"
 import { ChatTranscript } from "./chat-transcript"
 import { ConversationSidebar } from "./conversation-sidebar"
 import { MessageComposer } from "./message-composer"
+import { SampleQuestionPicker } from "./sample-question-picker"
+import { isSampleDatabase } from "@/lib/samples"
 
 let messageSeq = 0
 const nextId = (): string => `m${++messageSeq}-${Date.now()}`
@@ -29,6 +31,7 @@ const nextId = (): string => `m${++messageSeq}-${Date.now()}`
 export function ChatWorkspace({ databaseId }: { databaseId: string }) {
   const [dbMeta, setDbMeta] = useState<DatabaseSummary | null>(null)
   const [dbLoading, setDbLoading] = useState(true)
+  const [sampleQuestions, setSampleQuestions] = useState<string[]>([])
   const [conversations, setConversations] = useState<
     { id: string; title: string; createdAt?: string }[]
   >([])
@@ -73,6 +76,7 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
         try {
           const loaded = await getDatabaseConversations(databaseId)
           setDbMeta(loaded.database)
+          setSampleQuestions(loaded.questions)
           backendConversationIdsRef.current = new Set(
             loaded.conversations.map((c) => c.thread_id)
           )
@@ -80,6 +84,7 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
         } catch {
           // 404 or fetch failure: no database or nothing to restore
           setDbMeta(null)
+          setSampleQuestions([])
           setConversations([])
         } finally {
           setDbLoading(false)
@@ -404,6 +409,11 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
                 </span>
               </span>
             )}
+            {dbMeta && isSampleDatabase(dbMeta.database_name) && (
+              <span className="hidden rounded border border-border bg-elevated px-1.5 py-px font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground sm:inline">
+                Sample
+              </span>
+            )}
           </div>
         </header>
 
@@ -412,11 +422,21 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
             messages={messages}
             dbMeta={dbMeta}
             loadingHistory={loadingHistory}
+            sampleQuestions={sampleQuestions}
             onSuggest={(text) => send(text)}
           />
         </div>
 
         <div className="shrink-0 border-t border-border bg-background/95">
+          {sampleQuestions.length > 0 && (
+            <div className="mx-auto flex max-w-3xl px-4 pt-3 md:px-6">
+              <SampleQuestionPicker
+                questions={sampleQuestions}
+                disabled={streamingNow || !dbMeta}
+                onPick={(question) => send(question)}
+              />
+            </div>
+          )}
           <MessageComposer
             value={composer}
             onChange={setComposer}

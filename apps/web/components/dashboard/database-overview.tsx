@@ -19,6 +19,8 @@ import { EmptyDatabases } from "./empty-state"
 import { ConnectionPanel } from "./connection-panel"
 import { Dialog } from "./dialog"
 import { RegisterDatabaseDialog } from "./register-dialog"
+import { SampleSection } from "./sample-section"
+import { isSampleDatabase } from "@/lib/samples"
 import { VendorIcon } from "@/components/shared/sql-code"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -340,6 +342,7 @@ export function DatabaseOverview() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <p className="truncate font-mono text-[14px] font-medium text-foreground">{db.database_name}</p>
+                            {isSampleDatabase(db.database_name) && <SampleChip />}
                             {db.dense_schema && <IndexedChip />}
                           </div>
                           <p className="text-xs text-muted-foreground">{meta.label}</p>
@@ -362,6 +365,11 @@ export function DatabaseOverview() {
 
         {showPanel && <ConnectionPanel onDismiss={dismissPanel} />}
       </div>
+
+      <SampleSection
+        databases={databases}
+        onAdded={(created) => setDatabases((prev) => (prev ? [created, ...prev] : [created]))}
+      />
 
       {editing && (
         <EditDatabaseDialog
@@ -405,6 +413,14 @@ function IndexedChip() {
   )
 }
 
+function SampleChip() {
+  return (
+    <span className="rounded border border-border bg-elevated px-1.5 py-px font-mono text-[9.5px] uppercase tracking-wide text-muted-foreground">
+      Sample
+    </span>
+  )
+}
+
 /* ── table row + actions ──────────────────────────────────────────── */
 
 function DatabaseRow({
@@ -427,6 +443,7 @@ function DatabaseRow({
               <p className="truncate font-mono text-[13.5px] font-medium text-foreground">
                 {db.database_name}
               </p>
+              {isSampleDatabase(db.database_name) && <SampleChip />}
               {db.dense_schema && <IndexedChip />}
             </div>
           </div>
