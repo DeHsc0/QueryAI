@@ -119,7 +119,6 @@ function ResultTable({ query }: { query: TurnQuery }) {
   const numericCols = columns.filter(
     (c) => rows.every((r) => typeof r[c] === "number") && rows.length > 0,
   )
-
   return (
     <div>
       <div className="max-h-72 overflow-auto">
@@ -156,13 +155,7 @@ function ResultTable({ query }: { query: TurnQuery }) {
                         numericCols.includes(c) && "text-right font-mono tabular-nums"
                       )}
                     >
-                      {value === null || value === undefined ? (
-                        <span className="text-muted-foreground/60">null</span>
-                      ) : typeof value === "number" ? (
-                        value.toLocaleString("en-US", { maximumFractionDigits: 2 })
-                      ) : (
-                        value.toString()
-                      )}
+                      {formatCellValue(value)}
                     </td>
                   )
                 })}
@@ -176,4 +169,30 @@ function ResultTable({ query }: { query: TurnQuery }) {
       </p>
     </div>
   )
+}
+
+/** Renders any SQL result cell as readable text: scalars plainly, nested JSON in its encoded form (which the query itself produced) and structural nulls dimmed. */
+function formatCellValue(value: unknown): React.ReactNode {
+  if (value === null || value === undefined) {
+    return <span className="text-muted-foreground/60">null</span>
+  }
+  if (typeof value === "string") return value
+  if (typeof value === "number") {
+    return value.toLocaleString("en-US", { maximumFractionDigits: 2 })
+  }
+  if (typeof value === "boolean") return value ? "true" : "false"
+  // Nested object or array: unwrap a single-key {"value": x} envelope so the
+  // real value surfaces, otherwise show its JSON so nothing reads "[object Object]".
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>
+    const keys = Object.keys(record)
+    if (keys.length === 1 && keys[0] === "value") {
+      return formatCellValue(record.value)
+    }
+    const json = JSON.stringify(value)
+    return (
+      <span className="break-all font-mono text-[11px] text-muted-foreground">{json}</span>
+    )
+  }
+  return String(value)
 }

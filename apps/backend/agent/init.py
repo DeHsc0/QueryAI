@@ -55,10 +55,10 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         1) 
 
         Dense Schema :
-        T:film | cols:15 | J: language
-        T:rental | cols:8 | J: customer, inventory, staff
-        T:payment | cols:7
-        T:film_category | cols:3 | J: category, film
+        T:film | cols:[ column_names... ] | J: language // table film has 
+        T:rental | cols:[ column_names... ] | J: customer, inventory, staff
+        T:payment | cols:[ column_names... ]
+        T:film_category | cols:[ column_names... ] | J: category, film
         
         User Query: Show me the best movies
 
@@ -66,9 +66,9 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
 
         2) 
         Dense Schema :
-        T:customer | cols:11 | J: address, store
-        T:payment | cols:7
-        T:rental | cols:8 | J: customer, inventory, staff
+        T:customer | cols:[ column_names... ] | J: address, store
+        T:payment | cols:[ column_names... ]
+        T:rental | cols:[ column_names... ] | J: customer, inventory, staff
         
         User Query: Who are the top customers?
 
@@ -137,7 +137,7 @@ def get_agent( checkpointer : AsyncRedisSaver | RedisSaver) -> CompiledStateGrap
         middleware=[ 
             add_dense_schema, 
             ToolCallLimitMiddleware( tool_name="retrieve_context", run_limit=2 ),
-            ToolCallLimitMiddleware( tool_name="run_sql" , run_limit=2),
+            ToolCallLimitMiddleware( tool_name="run_sql" , run_limit=4),
             disable_parallel_tool_calls
             ]
 

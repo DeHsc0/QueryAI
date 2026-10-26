@@ -28,7 +28,7 @@ async def get_conversations(
         ).first()
 
     except Exception as e: 
-        return JSONResponse(content={ "message" : "Unable to verify database access" , "success": False} , status_code=301)
+        return JSONResponse(content={ "message" : "Unable to verify database access" , "success": False} , status_code=500)
 
     if not user_db:
         return JSONResponse(
@@ -49,7 +49,7 @@ async def get_conversations(
         ).first()
 
     except Exception as e: 
-        return JSONResponse(content={ "message" : "Unable to verify if the conversation exists or not" , "success": False} , status_code=301)
+        return JSONResponse(content={ "message" : "Unable to verify if the conversation exists or not" , "success": False} , status_code=500)
 
     if not conversation:
         return JSONResponse(
@@ -69,6 +69,6 @@ async def get_conversations(
         turns_data = [turn[0].dict() for turn in turns]
 
     except Exception as e : 
-        return JSONResponse(content={ "message" : "Unable to fetch turns", "success": False} , status_code=301)
+        return JSONResponse(content={ "message" : "Unable to fetch turns", "success": False} , status_code=500)
 
     return JSONResponse(content=jsonable_encoder({"data": turns_data}), status_code=200)

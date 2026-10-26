@@ -16,17 +16,27 @@ import { VendorIcon } from "@/components/shared/sql-code"
 import { ChatTranscript } from "./chat-transcript"
 import { ConversationSidebar } from "./conversation-sidebar"
 import { MessageComposer } from "./message-composer"
-import { SampleQuestionPicker } from "./sample-question-picker"
+import { SampleQuestionChips } from "./sample-question-chips"
 import { isSampleDatabase } from "@/lib/samples"
 
 let messageSeq = 0
 const nextId = (): string => `m${++messageSeq}-${Date.now()}`
 
+/** A live stream for one conversation: its assistant turn plus a flag the stream loop polls; Stop only ever touches the selected conversation's entry. */
+interface RunControl {
+  turnId: string
+  cancelled: boolean
+}
+
 /**
  * The chat workspace: conversation navigation on the left, transcript +
- * composer on the right. All backend interaction goes through lib/api;
- * stream events are applied against a run token so late events from an
- * abandoned conversation can never contaminate the active transcript.
+ * composer on the right. All backend interaction goes through lib/api.
+ *
+ * Streaming is conversation-owned: every transcript is keyed by conversation
+ * id and stream loops keep consuming after the user switches away, so a run
+ * started in conversation A finishes into A even while B is on screen — only
+ * the selected conversation's state renders, and Stop aborts just the
+ * selected conversation's run.
  */
 export function ChatWorkspace({ databaseId }: { databaseId: string }) {
   const [dbMeta, setDbMeta] = useState<DatabaseSummary | null>(null)
@@ -41,33 +51,51 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
     title: c.title,
     createdAt: c.created_at,
   })
+
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [loadingHistory, setLoadingHistory] = useState(false)
+  // Transcripts keyed by conversation id, retained while other conversations
+  // are selected so in-flight streams complete into their own entry.
+  const [transcriptsBy, setTranscriptsBy] = useState<Map<string, ChatMessage[]>>(new Map())
+  // Conversations whose persisted history is currently being fetched.
+  const [historyLoadingIds, setHistoryLoadingIds] = useState<string[]>([])
   const [composer, setComposer] = useState("")
   const [sidebarQuery, setSidebarQuery] = useState("")
   const [collapsed, setCollapsed] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  // run tokens: bumping invalidates any in-flight stream loop
-  const runIdRef = useRef(0)
+
   const activeIdRef = useRef<string | null>(null)
   // ids the backend itself issued (restored conversation list); locally
   // created conversations are absent here, so their requests send null
   const backendConversationIdsRef = useRef<Set<string>>(new Set())
+  // conversations whose store history was already merged this session
+  const historyMergedIdsRef = useRef<Set<string>>(new Set())
   const lastSubmittedRef = useRef<string | null>(null)
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null)
+  // One live run per conversation (the fresh-chat view is keyed "").
+  const runsRef = useRef<Map<string, RunControl>>(new Map())
+  // Stream iterators by conversation id so Stop can close exactly that one;
+  // closing the generator aborts its fetch inside lib.api streamChat.
+  const streamIteratorsRef = useRef<Map<string, AsyncGenerator<ChatStreamEvent, void, void>>>(
+    new Map()
+  )
+
+  const activeMessages = useMemo(
+    () => (activeId ? transcriptsBy.get(activeId) ?? [] : []),
+    [activeId, transcriptsBy]
+  )
+  const loadingHistory = activeId ? historyLoadingIds.includes(activeId) : false
 
   useEffect(() => {
     activeIdRef.current = activeId
   }, [activeId])
 
-  // Keep the transcript scrolled to the bottom for new/active conversations
+  // Keep the transcript scrolled to the bottom for the selected conversation
   // and as streamed content grows.
   useEffect(() => {
     const el = transcriptScrollRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
-  }, [messages, loadingHistory, activeId])
+  }, [activeMessages, loadingHistory, activeId])
 
   // initial load: database + its conversations, in one request
   useEffect(() => {
@@ -94,14 +122,24 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
     return () => clearTimeout(t)
   }, [databaseId])
 
-  const bumpRun = useCallback(() => {
-    runIdRef.current += 1
-    return runIdRef.current
-  }, [])
+  /* ── transcript mutation ───────────────────────────────────────── */
+
+  /** Rewrites one conversation's transcript, leaving every other conversation's messages untouched. */
+  const updateTranscript = useCallback(
+    (convId: string, updater: (messages: ChatMessage[]) => ChatMessage[]) => {
+      setTranscriptsBy((prev) => {
+        const current = prev.get(convId) ?? []
+        const next = updater(current)
+        if (next === current) return prev
+        return new Map(prev).set(convId, next)
+      })
+    },
+    []
+  )
 
   const finalizeStreamingMessage = useCallback(
-    (turnId: string, opts?: { error?: string }) => {
-      setMessages((prev) =>
+    (convId: string, turnId: string, opts?: { error?: string }) => {
+      updateTranscript(convId, (prev) =>
         prev.map((m) =>
           m.id === turnId
             ? {
@@ -114,21 +152,53 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
         )
       )
     },
-    []
+    [updateTranscript]
   )
 
   /* ── selection / new chat ──────────────────────────────────────── */
 
-  /** Adopts the backend-issued conversation id for the currently active one: marks it backend-known, swaps the sidebar's local stand-in id, and re-points the active selection. Returns the id to use from here on. */
+  /**
+   * Adopts the backend-issued conversation id mid-stream: marks it
+   * backend-known and re-keys the conversation's transcript and live run
+   * (previously held under the temporary local id), swaps the sidebar's
+   * stand-in id, and re-points the selection only when that conversation is
+   * still on screen. Returns the id the stream belongs to from here on.
+   */
   const adoptServerConversationId = useCallback(
     (localId: string, serverId: string): string => {
       backendConversationIdsRef.current = new Set(backendConversationIdsRef.current).add(serverId)
       if (serverId === localId) return localId
-      activeIdRef.current = serverId
-      setActiveId(serverId)
+
+      const run = runsRef.current.get(localId)
+      if (run) {
+        runsRef.current.delete(localId)
+        runsRef.current.set(serverId, run)
+      }
+      const iterator = streamIteratorsRef.current.get(localId)
+      if (iterator) {
+        streamIteratorsRef.current.delete(localId)
+        streamIteratorsRef.current.set(serverId, iterator)
+      }
+
+      setTranscriptsBy((prev) => {
+        if (!prev.has(localId)) return prev
+        const next = new Map(prev)
+        const messages = next.get(localId)
+        next.delete(localId)
+        if (messages) next.set(serverId, messages)
+        return next
+      })
       setConversations((prev) =>
         prev.map((c) => (c.id === localId ? { ...c, id: serverId } : c))
       )
+      setHistoryLoadingIds((prev) =>
+        prev.map((pending) => (pending === localId ? serverId : pending))
+      )
+
+      if (activeIdRef.current === localId) {
+        activeIdRef.current = serverId
+        setActiveId(serverId)
+      }
       return serverId
     },
     []
@@ -137,104 +207,136 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
   const selectConversation = useCallback(
     async (id: string) => {
       if (id === activeIdRef.current) return
-      bumpRun() // abort any in-flight stream for the previous conversation
       setDrawerOpen(false)
       setActiveId(id)
-      setMessages([])
-      setLoadingHistory(true)
+
+      // History is fetched once per conversation per session; afterwards the
+      // in-memory transcript (which may hold a live run) is authoritative.
+      if (historyMergedIdsRef.current.has(id)) return
+      setHistoryLoadingIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
       try {
         const turns = await getTurns(databaseId, id)
-        if (activeIdRef.current !== id) return // user moved on while loading
-        setMessages(turns.flatMap(turnToMessages))
+        historyMergedIdsRef.current.add(id)
+        setTranscriptsBy((prev) => {
+          const buffered = prev.get(id) ?? []
+          if (buffered.length === 0) {
+            if (turns.length === 0) return prev
+            return new Map(prev).set(id, turns.flatMap(turnToMessages))
+          }
+          // In-session messages stay authoritative (they carry the SQL result
+          // rows the backend does not persist): fetched turns are dropped
+          // when the same question is already in memory, so nothing copies.
+          const bufferedQueries = new Set(
+            buffered.filter((m) => m.role === "user").map((m) => m.content)
+          )
+          const historical = turns
+            .filter((t) => !bufferedQueries.has(t.user_query))
+            .flatMap(turnToMessages)
+          if (historical.length === 0) return prev
+          return new Map(prev).set(id, [...historical, ...buffered])
+        })
       } catch {
-        setMessages([])
+        // fetch failed: keep whatever the in-memory transcript already holds
       } finally {
-        setLoadingHistory(false)
+        setHistoryLoadingIds((prev) => prev.filter((pending) => pending !== id))
       }
     },
-    [bumpRun, databaseId]
+    [databaseId]
   )
 
   const newChat = useCallback(() => {
-    bumpRun()
     setDrawerOpen(false)
     setActiveId(null)
-    setMessages([])
     setComposer("")
-    // Never reuses the previous conversation id: null stays null until the
-    // first message is sent, at which point a fresh conversation is created.
-  }, [bumpRun])
+    // Runs elsewhere keep streaming: switching back later restores them.
+  }, [])
 
   /* ── streaming application ─────────────────────────────────────── */
 
-  const applyEvent = useCallback((turnId: string, event: ChatStreamEvent) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === turnId ? handleStreamingEvent(m, event) : m))
-    )
-  }, [])
+  const applyEvent = useCallback(
+    (convId: string, turnId: string, event: ChatStreamEvent) => {
+      updateTranscript(convId, (prev) =>
+        prev.map((m) => (m.id === turnId ? handleStreamingEvent(m, event) : m))
+      )
+    },
+    [updateTranscript]
+  )
 
   const send = useCallback(
     async (rawText?: string) => {
       const text = (rawText ?? composer).trim()
       const db = dbMeta
       if (!text || !db || dbLoading) return
-      const streamingNow = messages.some((m) => m.streaming)
-      if (streamingNow) return // prevent duplicate submissions
-
-      const myRun = bumpRun()
+      // Capture the composer content before clearing so a failed turn can
+      // restore it below.
       lastSubmittedRef.current = text
+      setComposer("")
+
+      const submittedFrom = activeIdRef.current
+      // One run per conversation: repeated submits into a conversation that
+      // already has a live run are ignored (fresh-chat view counts as "").
+      const initialKey = submittedFrom ?? ""
+      if (runsRef.current.has(initialKey)) return
 
       // The backend request only carries an id for a conversation the
       // backend itself created (restored via its list). Fresh chats and
       // locally-created conversations send conversation_id: null — the
-      // backend creates its own record until response handling returns ids.
-      const activeConvId = activeIdRef.current
+      // backend creates its own record and announces it mid-stream.
       const requestConversationId =
-        activeConvId && backendConversationIdsRef.current.has(activeConvId)
-          ? activeConvId
+        submittedFrom && backendConversationIdsRef.current.has(submittedFrom)
+          ? submittedFrom
           : null
-
-      // no persistent conversation exists yet: create a local one for the
-      // sidebar. The backend request above intentionally doesn't use this id.
-      let convId = activeIdRef.current
-      if (!convId) {
-        const conversation = await createConversation({ database_id: db.id, query: text })
-        if (runIdRef.current !== myRun) return // user switched away during create
-        convId = conversation.thread_id
-        activeIdRef.current = convId
-        setActiveId(convId)
-        setConversations((prev) => [toSidebarItem(conversation), ...prev])
-        setSidebarQuery("")
-      }
 
       const userTurnId = nextId()
       const assistantTurnId = nextId()
-      const now = new Date().toISOString()
-      setMessages([
-        ...messages,
-        {
-          id: userTurnId,
-          role: "user",
-          content: text,
-          createdAt: now,
-          streaming: false,
-          activity: [],
-          queries: [],
-        },
-        {
-          id: assistantTurnId,
-          role: "assistant",
-          content: "",
-          createdAt: now,
-          streaming: true,
-          activity: [{ key: "plan", label: "Understanding the question", status: "active" }],
-          queries: [],
-        },
-      ])
-      setComposer("")
+      const run: RunControl = { turnId: assistantTurnId, cancelled: false }
+
+      // While the local conversation is being created the run is parked under
+      // the submitted-from key so nothing else can submit from this view.
+      let convId = submittedFrom
+      let runKey = initialKey
+      runsRef.current.set(runKey, run)
 
       try {
-        for await (const event of streamChat(
+        if (!convId) {
+          const conversation = await createConversation({ database_id: db.id, query: text })
+          convId = conversation.thread_id
+          runKey = convId
+          runsRef.current.delete("")
+          runsRef.current.set(convId, run)
+          // The conversation joins the sidebar; the selection follows only if
+          // the user is still looking at the fresh-chat view.
+          setConversations((prev) => [toSidebarItem(conversation), ...prev])
+          if (activeIdRef.current === null) {
+            activeIdRef.current = convId
+            setActiveId(convId)
+          }
+        }
+
+        const now = new Date().toISOString()
+        updateTranscript(convId, (prev) => [
+          ...prev,
+          {
+            id: userTurnId,
+            role: "user",
+            content: text,
+            createdAt: now,
+            streaming: false,
+            activity: [],
+            queries: [],
+          },
+          {
+            id: assistantTurnId,
+            role: "assistant",
+            content: "",
+            createdAt: now,
+            streaming: true,
+            activity: [{ key: "plan", label: "Understanding the question", status: "active" }],
+            queries: [],
+          },
+        ])
+
+        const iterator = streamChat(
           {
             query: text,
             conversation_id: requestConversationId,
@@ -242,50 +344,76 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
           },
           // local id: keys the turn store so in-session history restores
           convId,
-        )) {
-          if (runIdRef.current !== myRun || activeIdRef.current !== convId) {
-            return // abandoned: new chat or conversation switch mid-stream
-          }
+        )
+        streamIteratorsRef.current.set(runKey, iterator)
+
+        while (true) {
+          const next = await iterator.next()
+          if (next.done) break
+          const event = next.value
+          if (run.cancelled) break
           if (event.type === "conversation") {
             // The backend announces the conversation it actually ran on
-            // (fresh chats create one mid-stream). Adopt it: it becomes the
-            // active conversation and the next question sends it back.
+            // (fresh chats create one mid-stream): re-key this run's state
+            // from the temporary local id to the real one.
             convId = adoptServerConversationId(convId, event.id)
+            runKey = convId
             continue
           }
-          applyEvent(assistantTurnId, event)
-          if (event.type === "done") return
+          applyEvent(convId, run.turnId, event)
+          if (event.type === "done") {
+            finalizeStreamingMessage(convId, run.turnId)
+            break
+          }
         }
       } catch (error) {
-        // connection dropped mid-turn: keep everything already streamed
-        if (runIdRef.current === myRun && activeIdRef.current === convId) {
-          finalizeStreamingMessage(assistantTurnId, {
+        // Connection dropped mid-turn (Stop's early close also lands here):
+        // keep everything already streamed in that conversation.
+        if (!run.cancelled && convId) {
+          finalizeStreamingMessage(convId, run.turnId, {
             error:
               error instanceof ApiError && error.message
                 ? error.message
                 : "The response stopped before finishing. Your messages are safe — try again.",
           })
-          if (!composer) setComposer(lastSubmittedRef.current ?? "")
+          if (activeIdRef.current === convId && composer.length === 0) {
+            setComposer(lastSubmittedRef.current ?? "")
+          }
         }
+      } finally {
+        runsRef.current.delete(runKey)
+        void streamIteratorsRef.current.get(runKey)?.return() // aborts the fetch if needed
+        streamIteratorsRef.current.delete(runKey)
       }
     },
     [
       adoptServerConversationId,
-      bumpRun,
+      applyEvent,
       composer,
       dbLoading,
       dbMeta,
       finalizeStreamingMessage,
-      messages,
-      applyEvent,
+      updateTranscript,
     ]
   )
 
   const stop = useCallback(() => {
-    bumpRun()
-    const streaming = messages.find((m) => m.streaming)
-    if (streaming) finalizeStreamingMessage(streaming.id)
-  }, [bumpRun, finalizeStreamingMessage, messages])
+    const convId = activeIdRef.current
+    if (!convId) return
+    const run = runsRef.current.get(convId)
+    if (!run) return
+    run.cancelled = true
+    finalizeStreamingMessage(convId, run.turnId)
+    // Closing the generator makes lib.api streamChat abort its fetch; the
+    // loop notices and cleans up the run registry. Other conversations'
+    // runs are untouched.
+    void streamIteratorsRef.current.get(convId)?.return()
+  }, [finalizeStreamingMessage])
+
+  /** Loads a suggested question into the composer without sending. Each pick replaces the draft, so the composer always holds exactly the clicked question. */
+  const fillComposer = useCallback((question: string) => {
+    setComposer(question)
+  }, [])
 
   const filteredConversations = useMemo(() => {
     const q = sidebarQuery.trim().toLowerCase()
@@ -301,9 +429,10 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
     [conversationById, activeId]
   )
 
+  // Only the selected conversation's run controls the composer/stop state.
   const streamingNow = useMemo(
-    () => messages.some((m) => m.streaming),
-    [messages]
+    () => activeMessages.some((m) => m.streaming),
+    [activeMessages]
   )
 
   /* ── no database registered for this workspace ─────────────────── */
@@ -419,21 +548,24 @@ export function ChatWorkspace({ databaseId }: { databaseId: string }) {
 
         <div ref={transcriptScrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <ChatTranscript
-            messages={messages}
+            messages={activeMessages}
             dbMeta={dbMeta}
-            loadingHistory={loadingHistory}
+            // The history skeleton only replaces an empty transcript; a
+            // conversation with in-session messages (e.g. a live run) keeps
+            // rendering them while its store history is being fetched.
+            loadingHistory={loadingHistory && activeMessages.length === 0}
             sampleQuestions={sampleQuestions}
-            onSuggest={(text) => send(text)}
+            onSuggest={fillComposer}
           />
         </div>
 
         <div className="shrink-0 border-t border-border bg-background/95">
           {sampleQuestions.length > 0 && (
-            <div className="mx-auto flex max-w-3xl px-4 pt-3 md:px-6">
-              <SampleQuestionPicker
+            <div className="mx-auto w-full max-w-3xl px-4 pt-2.5 md:px-6">
+              <SampleQuestionChips
                 questions={sampleQuestions}
                 disabled={streamingNow || !dbMeta}
-                onPick={(question) => send(question)}
+                onPick={fillComposer}
               />
             </div>
           )}

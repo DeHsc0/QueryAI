@@ -56,4 +56,4 @@ def get_conversation(req:Request , db_id : str , session = Depends(get_db)):
         }})
 
     except Exception as e : 
-        return JSONResponse(content={ "message" : "Unable to fetch conversation data bla bla bla bla " , "success" : False , "error" : str(e)} , status_code=301)
+        return JSONResponse(content={ "message" : "Unable to fetch conversation data bla bla bla bla " , "success" : False , "error" : str(e)} , status_code=500)

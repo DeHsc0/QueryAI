@@ -183,7 +183,7 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
                 recent_turns = [ turn for turn in turns ]
 
             except Exception as e: 
-                return JSONResponse(content={"message" : e , "success" : False } , status_code=404)        
+                return JSONResponse(content={"message" : e , "success" : False } , status_code=500)        
 
         user_pref_cache_key = f"user_prefs:{user_id}:{data.db_id}:{data.conversation_id}"
 
@@ -304,11 +304,4 @@ async def chat (req : Request , data : Chat , session : Session = Depends(get_db
             yield f'data: {json.dumps({"type": "done" , "conversation_id" : str(new_convo_id if new_convo_id else data.conversation_id) })}\n\n'
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-    # return JSONResponse(content={
-
-    #     "data" : ""
-
-    # } , status_code=200)
-
 

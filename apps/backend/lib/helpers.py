@@ -157,11 +157,11 @@ def store_schema ( creds : Creds ):
 
                         if foreign_keys.index(fk) == last_index_fk: 
 
-                            db_dense_schema.append(f" {referred_table} \n")
+                            db_dense_schema.append(f"{name}.{constrained_cols} → {referred_table}.{referred_cols} \n")
 
                         else : 
 
-                            db_dense_schema.append(f" {referred_table} , ")
+                            db_dense_schema.append(f"{name}.{constrained_cols} → {referred_table}.{referred_cols} , ")
 
                         relationships.append(
                             f"{name}.{constrained_cols} → {referred_table}.{referred_cols}"

@@ -1,9 +1,10 @@
 "use client"
 
-import { Check, RefreshCw, Sparkles } from "lucide-react"
+import { RefreshCw, Sparkles } from "lucide-react"
 import type { ChatMessage } from "./chat-types"
 import { MarkdownMessage } from "./markdown-message"
 import { SqlResultCard } from "./sql-result-card"
+import { ActivityRail, ThinkingBody, useStreamElapsed } from "./thinking-indicator"
 import type { DatabaseSummary } from "@/lib/types"
 import { getVendor } from "@/components/dashboard/vendor"
 import { cn } from "@/lib/utils"
@@ -37,12 +38,14 @@ export function ChatTranscript({
           <div className="flex flex-col gap-3 pt-6" role="status" aria-live="polite">
             {[
               { h: "h-3 w-64", own: false },
-              { h: "h-16 w-full", own: true },
+              { h: "h-16 w-3/4", own: true },
               { h: "h-3 w-48", own: false },
+              { h: "h-2 w-[55%]", own: false },
             ].map((s, i) => (
               <span
                 key={i}
-                className={cn("block animate-pulse rounded bg-muted", s.h, s.own && "ml-auto")}
+                className={cn("sk-line", s.h, s.own && "ml-auto")}
+                style={{ "--sk-delay": `${i * 140}ms` } as React.CSSProperties}
                 aria-hidden="true"
               />
             ))}
@@ -53,7 +56,10 @@ export function ChatTranscript({
         ) : (
           <ol className="flex flex-col gap-6" aria-label="Conversation messages">
             {messages.map((m) => (
-              <li key={m.id} className={cn("", m.role === "user" && "flex justify-end")}>
+              <li
+                key={m.id}
+                className={cn("message-in", m.role === "user" && "flex justify-end")}
+              >
                 {m.role === "user" ? (
                   <div className="max-w-[85%] rounded-2xl rounded-br-md border border-accent-bright/25 bg-accent-bright/[0.07] px-4 py-2.5 text-[14.5px] leading-relaxed text-foreground">
                     {m.content}
@@ -100,22 +106,27 @@ function EmptyState({
           : "No database is selected for this conversation"}
       </p>
 
-      <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-2 text-left sm:grid-cols-2">
-        {prompts.map((s) => (
+      <div className="mt-8 flex w-full max-w-xl flex-col gap-2">
+        {prompts.map((s, i) => (
           <button
             key={s}
             type="button"
             onClick={() => onSuggest(s)}
-            className="group flex min-h-11 items-center gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-[13px] text-muted-foreground transition-colors hover:border-ring/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="group flex items-start gap-3 rounded-lg border border-border bg-card px-3.5 py-2.5 text-left text-[13px] leading-relaxed text-muted-foreground transition-colors hover:border-ring/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
+            <span className="mt-0.5 shrink-0 font-mono text-[10.5px] text-muted-foreground/60">
+              {String(i + 1).padStart(2, "0")}
+            </span>
             <span className="flex-1">{s}</span>
-            <ArrowRightHint />
+            <span className="mt-0.5">
+              <ArrowRightHint />
+            </span>
           </button>
         ))}
       </div>
       <p className="mt-5 text-[11px] text-muted-foreground">
         {isSample
-          ? "Sample questions for this database. Pick more from the list above the composer."
+          ? "Sample questions for this database — one click loads it into the input, ready to edit and send."
           : "Illustrative examples; phrasing works best when it matches the tables in your database."}
       </p>
     </div>
@@ -138,40 +149,15 @@ function ArrowRightHint() {
 
 function AssistantMessage({ message }: { message: ChatMessage }) {
   const streamingText = message.streaming
+  const elapsed = useStreamElapsed(message.streaming)
   return (
     <article className="min-w-0 max-w-3xl">
       {/* agent activity */}
-      {message.activity.length > 0 && (
-        <>
-          {message.streaming ? (
-            <ol
-              className="mb-3 flex flex-col gap-1.5"
-              aria-label="Agent activity"
-              aria-live="polite"
-            >
-              {message.activity.map((a) => (
-                <li key={a.key} className="flex items-center gap-2 text-xs">
-                  <span
-                    className={cn(
-                      "grid size-4 place-items-center rounded-full border",
-                      a.status === "done"
-                        ? "bg-accent-bright/80 text-background"
-                        : "border-accent-bright text-accent-bright"
-                    )}
-                    aria-hidden="true"
-                  >
-                    {a.status === "done" && <Check className="size-2.5" strokeWidth={3.5} />}
-                    {a.status === "active" && <span className="size-1 rounded-full bg-accent-bright demo-ping" />}
-                  </span>
-                  <span className={a.status === "done" ? "text-muted-foreground" : "text-foreground"}>
-                    {a.label}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          ) : null}
-        </>
+      {message.streaming && message.activity.length > 0 && (
+        <ActivityRail activity={message.activity} elapsed={elapsed} />
       )}
+      {/* skeleton preview while the turn runs but nothing has streamed in yet */}
+      {message.streaming && !message.content && <div className="mb-2"><ThinkingBody /></div>}
 
       {/* executed queries + structured results */}
       {message.queries.length > 0 && (

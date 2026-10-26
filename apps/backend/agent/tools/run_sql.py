@@ -69,31 +69,36 @@ def run_sql( query : str , runtime : ToolRuntime ):
     
     raw_creds : str = runtime.context.encrypted_creds
 
-    creds = Creds.model_validate( decrypt_credentials(raw_creds)["creds"] )
+    try: 
 
-    with get_user_db(creds) as (db, engine ) : 
+        creds = Creds.model_validate( decrypt_credentials(raw_creds)["creds"] )
 
-        results : CursorResult = db.exec(
+        with get_user_db(creds) as (db, engine ) : 
 
-            text(final_query)
+            results : CursorResult = db.exec(
 
-        )        
+                text(final_query)
 
-        result = results.mappings().fetchmany( size=MAX_ROWS + 1 )
-        temp_res = []
+            )        
 
-        for el in result: 
+            result = results.mappings().fetchmany( size=MAX_ROWS + 1 )
+            temp_res = []
 
-            item = dict(el)
+            for el in result: 
 
-            for key , value in item.items():
+                item = dict(el)
 
-                if isinstance(value , Decimal):
+                for key , value in item.items():
 
-                    item[key] = float(item[key])
+                    if isinstance(value , Decimal):
 
-            temp_res.append(item)     
+                        item[key] = float(item[key])
 
-        final_result = json.dumps(temp_res)
+                temp_res.append(item)     
+
+            final_result = json.dumps(temp_res)
+
+    except Exception as e: 
+        return { "error" : e}
 
     return final_result

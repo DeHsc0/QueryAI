@@ -55,9 +55,9 @@ async def get_databases(req : Request , session : Session =Depends(get_db)):
 
     except Exception as e : 
     
-        return JSONResponse( content={ "message" : "Unable to fetch user's database data"  , "success" : False} , status_code=301 )
+        return JSONResponse( content={ "message" : "Unable to fetch user's database data"  , "success" : False} , status_code=500 )
 
-    return JSONResponse({ "data" : databases })
+    return JSONResponse({ "data" : databases } , status_code=200)
 
  
 @router.post("/")
@@ -80,7 +80,7 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
             
             )
         else: 
-            return JSONResponse(content={ "message" : f"Sample database with the name {data.sample_db} dosent exists."} , status_code=201)
+            return JSONResponse(content={ "message" : f"Sample database with the name {data.sample_db} dosent exists."} , status_code=422)
     else: 
         creds = data.creds
 
@@ -98,14 +98,14 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
         ).first() 
 
     except Exception as e: 
-        return JSONResponse(content={ "message" : "Something went wrong"  } , status_code=301 )
+        return JSONResponse(content={ "message" : "Something went wrong"  } , status_code=500 )
 
     if existing_database: 
         return  JSONResponse(content={
     
         "message" : "Database with same name already exists "
     
-    } , status_code=301)
+    } , status_code=409)
 
 
     try:
@@ -132,7 +132,7 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
         session.refresh(database)
 
     except Exception as e: 
-        return JSONResponse(content={ "message" : "unable to register the database" , "message" : str(e) } , status_code=301 )
+        return JSONResponse(content={ "message" : "unable to register the database" , "message" : str(e) } , status_code=500 )
 
     ingest_schema.delay(json.dumps({ "schema_str" : schema , "user_id" : user_id , "db_id" : str(database.id) }))
     
@@ -146,7 +146,7 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
                     "created_at": str(database.created_at),
                 }
     
-    } , status_code=200)
+    } , status_code=201)
 
 @router.delete("/{db_id}") 
 async def delete_database( req : Request , db_id : str , session : Session = Depends(get_db)): 
@@ -158,7 +158,7 @@ async def delete_database( req : Request , db_id : str , session : Session = Dep
         user_db = session.exec( select( UserDatabases ).where( UserDatabases.id == db_id , UserDatabases.user_clerk_id  == user_id) ).first()
 
         if not user_db: 
-            return JSONResponse(content={ "message" : "Database Dosent exists"} , status_code=301)
+            return JSONResponse(content={ "message" : "Database Dosent exists"} , status_code=404)
 
         session.delete(user_db)
         session.commit()
@@ -182,7 +182,7 @@ async def delete_database( req : Request , db_id : str , session : Session = Dep
             wait=True,  
         )
 
-        return JSONResponse(content={ "message" : "Successfully deleted the registered database."})
+        return JSONResponse(content={ "message" : "Successfully deleted the registered database."} )
 
     except Exception as e: 
         return JSONResponse(content={ "message" : "Unable to delete the registered database." , "error" : str(e)} , status_code=500)

@@ -28,6 +28,22 @@ export function MessageComposer({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [touch, setTouch] = useState(false)
+  // previously-empty tracking: a transition from empty to filled that didn't
+  // start from the textarea itself (sample chip / suggestion click) refocuses it
+  const prevEmpty = useRef(true)
+
+  useEffect(() => {
+    const empty = value.trim().length === 0
+    if (!empty && prevEmpty.current) {
+      const el = textareaRef.current
+      if (el && !el.matches(":focus")) {
+        el.focus()
+        const end = el.value.length
+        el.setSelectionRange(end, end)
+      }
+    }
+    prevEmpty.current = empty
+  }, [value])
 
   useEffect(() => {
     const mq = window.matchMedia("(pointer: coarse)")
