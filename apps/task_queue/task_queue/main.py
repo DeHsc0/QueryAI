@@ -1,10 +1,14 @@
 from celery import Celery
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 app = Celery(
 
     "celery", 
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/1",
+    broker=f"{os.getenv("REDIS_URL")}/0",
+    backend=f"{os.getenv("REDIS_URL")}/1",
     include=["task_queue.tasks"]
 
 )
