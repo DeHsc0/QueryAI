@@ -2586,6 +2586,7 @@ dependencies = [
     { name = "db" },
     { name = "psycopg2" },
     { name = "pydantic" },
+    { name = "qdrant-client" },
     { name = "redis" },
 ]
 
@@ -2595,6 +2596,7 @@ requires-dist = [
     { name = "db", editable = "packages/db" },
     { name = "psycopg2", specifier = ">=2.9.12" },
     { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "qdrant-client", specifier = ">=1.19.0" },
     { name = "redis", specifier = ">=7.4.1,<8.0" },
 ]
 
