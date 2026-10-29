@@ -1,7 +1,7 @@
 /**
- * Shape of one entry in the root data.json (the sample database catalog).
- * Only the server page imports the JSON itself; client components receive a
- * single entry as props, so the full catalog never ships to the browser.
+ * Shape of one entry in the sample database catalog (lib/sample-catalog-data.ts,
+ * hardcoded from the root data.json). Client components receive a single entry
+ * as props, so the full catalog never ships to the browser.
  */
 
 export type CatalogScalar = string | number | boolean | null
@@ -27,7 +27,7 @@ export interface CatalogJsonField {
   type: string
   description: string
   example?: CatalogScalar
-  possible_values?: string[]
+  possible_values?: CatalogScalar[]
 }
 
 export interface CatalogJsonGroup {
@@ -43,7 +43,9 @@ export interface CatalogColumn {
   is_primary_key: boolean
   foreign_key: { table: string; column: string } | null
   example?: CatalogScalar
-  possible_values?: string[]
+  possible_values?: CatalogScalar[]
+  is_unique?: boolean
+  note?: string
   json_schema?: Record<string, CatalogJsonGroup>
 }
 
@@ -70,6 +72,22 @@ export interface CatalogRelationship {
   meaning: string
 }
 
+export interface CatalogKnowledgeEntry {
+  id: number
+  name: string
+  kind: string
+  description: string
+  formula?: string
+  rule?: string
+  depends_on: { id: number; name: string }[]
+}
+
+export interface CatalogSampleQuestion {
+  question: string
+  type: string
+  uses_knowledge: string[]
+}
+
 export interface SampleCatalogEntry {
   id: string
   name: string
@@ -81,6 +99,9 @@ export interface SampleCatalogEntry {
   what_you_can_ask: string[]
   tables: CatalogTable[]
   relationships: CatalogRelationship[]
+  knowledge_base?: CatalogKnowledgeEntry[]
+  data_quirks?: string[]
+  sample_questions?: CatalogSampleQuestion[]
 }
 
 /** Renders any sample cell value as readable text. */

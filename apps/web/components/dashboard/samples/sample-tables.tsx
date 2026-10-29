@@ -109,8 +109,8 @@ function TablePanel({ id, table }: { id: string; table: CatalogTable }) {
                     {column.possible_values && (
                       <span className="mt-1.5 flex flex-wrap gap-1">
                         {column.possible_values.map((v) => (
-                          <span key={v} className="rounded bg-muted px-1.5 py-px font-mono text-[10.5px] text-foreground/80">
-                            {v}
+                          <span key={String(v)} className="rounded bg-muted px-1.5 py-px font-mono text-[10.5px] text-foreground/80">
+                            {formatCatalogValue(v)}
                           </span>
                         ))}
                       </span>
