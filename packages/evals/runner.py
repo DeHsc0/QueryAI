@@ -18,7 +18,7 @@ from deepeval.metrics import (
 )
 from deepeval.test_case import LLMTestCase, ToolCall
 
-from config import JUDGE_MODEL, THRESHOLDS, validate_eval_environment
+from eval_config import JUDGE_MODEL, THRESHOLDS, validate_eval_environment
 from dataset.loader import EvalCase, load_bird_interact
 from metrics import (
     ClarifyingQuestionQuality,

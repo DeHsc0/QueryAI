@@ -23,6 +23,7 @@ dependencies = [
     "uvicorn>=0.49.0",
     "task_queue",
     "db",
+    "config",
     "sqlglot>=30.18.0",
     "celery>=5.6.3",
     "mem0ai>=2.2.1",
@@ -37,4 +38,5 @@ packages = ["agent"]
 
 [tool.uv.sources]
 db = { workspace = true }
+config = { workspace = true }
 task_queue = { workspace = true }

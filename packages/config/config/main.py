@@ -2,7 +2,7 @@ from qdrant_client import QdrantClient , models
 import os 
 from dotenv import load_dotenv
 from redis import Redis
-
+from mem0 import MemoryClient 
 
 load_dotenv()
 
@@ -63,5 +63,8 @@ def get_redis_client () -> Redis :
 
     return redis_client
 
+def get_mem0 () -> MemoryClient : 
     
-    
+    mem0 = MemoryClient()
+
+    return mem0

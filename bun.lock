@@ -54,6 +54,14 @@
         "typescript": "^5",
       },
     },
+    "packages/config": {
+      "name": "@repo/config",
+      "version": "0.0.0",
+    },
+    "packages/db": {
+      "name": "@repo/db",
+      "version": "0.0.0",
+    },
     "packages/eslint-config": {
       "name": "@repo/eslint-config",
       "version": "0.0.0",
@@ -431,6 +439,10 @@
     "@radix-ui/rect": ["@radix-ui/rect@1.1.2", "", {}, "sha512-xnXE7wG13PI+cxieVssYXlQJuYVRhH9NBoxt3KNwzghDIA69GMm7d4wXRouHIYjE+KvS6U/MsMO73NdS2MH9ZA=="],
 
     "@repo/backend": ["@repo/backend@workspace:apps/backend"],
+
+    "@repo/config": ["@repo/config@workspace:packages/config"],
+
+    "@repo/db": ["@repo/db@workspace:packages/db"],
 
     "@repo/eslint-config": ["@repo/eslint-config@workspace:packages/eslint-config"],
 

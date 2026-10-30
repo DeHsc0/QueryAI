@@ -12,9 +12,9 @@ from sqlmodel import Session , select
 from db.models import Conversations , Turns , UserDatabases 
 from fastapi import Depends 
 from db.dependency import get_db
-from lib.config import get_redis_client
+from config import get_redis_client
 import json 
-from agent.memory.long import mem0
+from config import get_mem0
 
 @dataclass
 class Tool_Call: 
@@ -28,6 +28,9 @@ router = APIRouter()
 
 @router.post("/")
 async def chat (req : Request , data : Chat , session : Session = Depends(get_db)):
+
+    mem0 = get_mem0() 
+
     state : AppState = req.app.state
 
     user_id : str = req.state.clerk.get("sub")

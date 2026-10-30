@@ -1,5 +1,5 @@
 from langchain.tools import tool , ToolRuntime
-from lib.config import get_qdrant_client
+from config import get_qdrant_client
 import os
 from qdrant_client import models
 import json 

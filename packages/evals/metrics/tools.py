@@ -1,6 +1,6 @@
 from deepeval.metrics import GEval
 from deepeval.test_case import SingleTurnParams
-from config import JUDGE_MODEL, THRESHOLDS
+from eval_config import JUDGE_MODEL, THRESHOLDS
 
 
 def ToolOrderCompliance() -> GEval:

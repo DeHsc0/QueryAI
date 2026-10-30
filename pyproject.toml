@@ -7,4 +7,5 @@ members = [
     "apps/task_queue",
     "packages/db",
     "packages/evals",
+    "packages/config"
 ]

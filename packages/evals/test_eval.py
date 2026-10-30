@@ -7,7 +7,7 @@ from deepeval import assert_test
 
 from dataset.loader import load_bird_interact
 from runner import _get_agent, _run_agent, build_test_case, get_all_metrics
-from config import validate_eval_environment
+from eval_config import validate_eval_environment
 
 DATASET_PATH = Path(__file__).parent / "dataset" / "bird_interact_data_with_gt.txt"
 EVAL_DOMAIN = "alien"

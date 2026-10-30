@@ -6,8 +6,8 @@ from typing import List , Any
 import json 
 import os 
 from uuid import uuid4
-from agent.memory.long import mem0
-from lib.config import get_qdrant_client
+from config import get_mem0
+from  config import get_qdrant_client
 from qdrant_client import models 
 
 class Turn_data(BaseModel):
@@ -25,6 +25,8 @@ class Schema_Data(BaseModel):
 
 @app.task(bind=True , max_retries=3 , default_retry_delay=120 )
 def memory_write(self , raw_data : str): 
+
+    mem0 = get_mem0()
 
     try: 
 

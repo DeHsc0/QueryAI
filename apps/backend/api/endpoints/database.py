@@ -9,7 +9,7 @@ from db.models import UserDatabases
 import json
 from sqlmodel import Session, select
 from task_queue.tasks import ingest_schema
-from lib.config import get_qdrant_client 
+from config import get_qdrant_client 
 from qdrant_client import models  
 import os 
 

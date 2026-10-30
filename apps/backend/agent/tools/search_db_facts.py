@@ -1,7 +1,7 @@
 from langchain.tools import tool , ToolRuntime
 from pydantic import BaseModel , Field 
 from agent.context import Context
-from agent.memory.long import mem0
+from config import get_mem0
 
 class Search_Db_Facts(BaseModel):
     
@@ -21,6 +21,8 @@ def search_db_facts ( query : str , runtime : ToolRuntime[Context] ):
     from past sessions. Returns memories ranked by relevance."""
 
     user_id , db_id = runtime.context.tenant_id.split("__" , 1)
+
+    mem0 = get_mem0() 
 
     result = mem0.search(
         query,
