@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "uv run celery -A task_queue.main:app worker -E --loglevel=info",
-    "build": "uv sync --frozen",
+    "build": "uv sync --frozen --python 3.14",
     "start": "uv run celery -A task_queue.main:app worker -E --loglevel=info"
   }
 }

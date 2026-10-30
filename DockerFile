@@ -1,0 +1,30 @@
+FROM node:22-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /queryai 
+
+RUN python3 -m venv /opt/uv && /opt/uv/bin/pip install --no-cache-dir uv
+
+RUN npm install -g bun
+
+ENV PATH="/opt/uv/bin:${PATH}"
+ENV UV_HTTP_TIMEOUT=2000
+
+COPY package.json bun.lock turbo.json pyproject.toml uv.lock ./ 
+
+COPY apps/backend/package.json ./apps/backend/package.json 
+COPY apps/backend/pyproject.toml ./apps/backend/pyproject.toml
+COPY apps/task_queue/package.json ./apps/task_queue/package.json 
+COPY apps/task_queue/pyproject.toml ./apps/task_queue/pyproject.toml
+COPY apps/web/package.json ./apps/web/package.json 
+COPY packages/eslint-config/package.json ./packages/eslint-config/package.json
+COPY packages/typescript-config/package.json ./packages/typescript-config/package.json
+
+RUN bun install && uv sync --frozen --python 3.14
+
+COPY . .
+
+RUN bunx turbo run build
+
+CMD [ "bunx" , "turbo" ,  "run" ,  "start" ]
