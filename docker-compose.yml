@@ -1,0 +1,4 @@
+services:
+  app:
+    image: queryai:latest
+    env_file: .env.production
