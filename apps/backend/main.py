@@ -41,7 +41,7 @@ auth_token = HTTPBearer()
 
 origins=[
 
-        "http://localhost:3000"
+        os.getenv("FRONTEND_URL")
     
     ]
 
