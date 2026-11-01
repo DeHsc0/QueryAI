@@ -39,20 +39,13 @@ app = FastAPI(lifespan=lifespan)
 
 auth_token = HTTPBearer() 
 
-origins=[
-
-        os.getenv("FRONTEND_URL")
-    
-    ]
-
 class ClerkAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch ( self , req : Request , call_next  ): 
 
         public_paths = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/auth/webhook" }
-        
-        if req.url.path in public_paths:
-        
-            return await call_next(req)        
+
+        if req.method == "OPTIONS" or req.url.path in public_paths:
+            return await call_next(req)
 
         try:
 
@@ -103,8 +96,12 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
         
         response = await call_next(req)
         return response 
+
+origins=[
+
+    os.getenv("FRONTEND_URL")
     
-app.add_middleware(ClerkAuthMiddleware)
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -113,6 +110,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+app.add_middleware(ClerkAuthMiddleware)
 
 app.include_router(api_router , prefix="/api")
    
