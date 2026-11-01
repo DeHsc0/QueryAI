@@ -3,5 +3,5 @@ services:
     image: queryai:latest
     env_file: .env.production
     ports:
-      - "3000:3000"
-      - "8000:8000"
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:8000:8000"
