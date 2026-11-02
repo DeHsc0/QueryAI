@@ -24,7 +24,8 @@
     "SAMPLE_DB_HOST",
     "SAMPLE_DB_PORT",
     "SAMPLE_DB_USER",
-    "SAMPLE_DB_PASSWORD"
+    "SAMPLE_DB_PASSWORD",
+    "FRONTEND_URL"
   ],
   "futureFlags": {
     "experimentalPythonWorkspaces": true
