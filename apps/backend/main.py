@@ -39,6 +39,12 @@ app = FastAPI(lifespan=lifespan)
 
 auth_token = HTTPBearer() 
 
+origins=[
+
+    os.getenv("FRONTEND_URL")
+    
+]
+
 class ClerkAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch ( self , req : Request , call_next  ): 
 
@@ -67,13 +73,6 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             )
 
             if not req_state.is_signed_in or not req_state.is_authenticated: 
-
-                logger.warning(
-                    "Clerk rejected request: status=%s reason=%s message=%s",
-                    req_state.status,
-                    req_state.reason,
-                    req_state.message,
-                )
 
                 return JSONResponse(
 
@@ -105,11 +104,6 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
         response = await call_next(req)
         return response 
 
-origins=[
-
-    os.getenv("FRONTEND_URL")
-    
-]
 
 app.add_middleware(
     CORSMiddleware,
