@@ -122,7 +122,7 @@ const turnsStore: Map<string, Turn[]> = new Map()
  * listDatabases + listConversations double fetch.
  */
 export async function getDatabaseConversations(dbId: string): Promise<DatabaseWithConversations> {
-  const resp = await api.get(`/api/conversation/${dbId}`).catch(fail)
+  const resp = await api.get(`/api/conversation/${dbId}/`).catch(fail)
   const body = parse(databaseWithConversationsResponseSchema, resp.data, "GET /api/conversation")
   return {
     // GET omits dense_schema (schema indexing runs async after creation).
@@ -139,7 +139,7 @@ export async function getDatabaseConversations(dbId: string): Promise<DatabaseWi
 
 export async function getTurns(dbId: string, conversationId: string): Promise<Turn[]> {
   try {
-    const resp = await api.get(`/api/turns/${dbId}/${conversationId}`)
+    const resp = await api.get(`/api/turns/${dbId}/${conversationId}/`)
     const body = parse(turnsResponseSchema, resp.data, "GET /api/turns")
     // Backend returns the 5 newest turns newest-first; the transcript is
     // chronological, so restore reading order.
@@ -159,7 +159,7 @@ export async function getTurns(dbId: string, conversationId: string): Promise<Tu
 // ──────────────────────────────────────────
 
 export async function listDatabases(): Promise<DatabaseSummary[]> {
-  const resp = await api.get("/api/database").catch(fail)
+  const resp = await api.get("/api/database/").catch(fail)
   const body = parse(databasesResponseSchema, resp.data, "GET /api/database")
   return body.data.map((db) => ({
     ...db,
@@ -175,7 +175,7 @@ export async function registerDatabase(
   // the client, so a bad submission fails here instead of as a 422.
   // sample_db must be sent (as null) too: the backend field has no default.
   const payload = { ...registerDatabaseRequestSchema.parse(request), sample_db: null }
-  const resp = await api.post("/api/database", payload).catch(fail)
+  const resp = await api.post("/api/database/", payload).catch(fail)
   const body = parse(databaseResponseSchema, resp.data, "POST /api/database")
   return { ...body.data, dense_schema: body.data.dense_schema ?? null }
 }
@@ -187,7 +187,7 @@ export async function registerDatabase(
  */
 export async function registerSampleDatabase(sampleId: string): Promise<DatabaseSummary> {
   const resp = await api
-    .post("/api/database", {
+    .post("/api/database/", {
       database_name: sampleId,
       sample_db: sampleId,
       description: null,
@@ -268,7 +268,7 @@ export async function* streamChat(
   try {
     const token = await tokenProvider().catch(() => null)
 
-    const resp = await fetch(`${BACKEND_URL}/api/chat`, {
+    const resp = await fetch(`${BACKEND_URL}/api/chat/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -590,5 +590,5 @@ export async function updateDatabase(
 }
 
 export async function deleteDatabase(dbId: string): Promise<void> {
-  await api.delete(`/api/database/${dbId}`).catch(fail)
+  await api.delete(`/api/database/${dbId}/`).catch(fail)
 }

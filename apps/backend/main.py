@@ -67,6 +67,14 @@ class ClerkAuthMiddleware(BaseHTTPMiddleware):
             )
 
             if not req_state.is_signed_in or not req_state.is_authenticated: 
+
+                logger.warning(
+                    "Clerk rejected request: status=%s reason=%s message=%s",
+                    req_state.status,
+                    req_state.reason,
+                    req_state.message,
+                )
+
                 return JSONResponse(
 
                     content={
