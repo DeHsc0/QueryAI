@@ -148,7 +148,7 @@ async def create_database(req : Request ,  data : Database_Creation , session : 
     
     } , status_code=201)
 
-@router.delete("/{db_id}") 
+@router.delete("/{db_id}/") 
 async def delete_database( req : Request , db_id : str , session : Session = Depends(get_db)): 
 
     try :

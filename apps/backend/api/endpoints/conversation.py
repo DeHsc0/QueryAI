@@ -9,7 +9,7 @@ from lib.helpers import SAMPLE_DB
 
 router = APIRouter()
 
-@router.get("/{db_id}")
+@router.get("/{db_id}/")
 def get_conversation(req:Request , db_id : str , session = Depends(get_db)): 
 
     user_id : str = req.state.clerk.get("sub")

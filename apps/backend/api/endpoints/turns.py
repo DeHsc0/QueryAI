@@ -8,7 +8,7 @@ from db.dependency import get_db
 
 router = APIRouter()
 
-@router.get("/{db_id}/{conversation_id}")
+@router.get("/{db_id}/{conversation_id}/")
 async def get_conversations(
     req: Request,
     db_id: str,
