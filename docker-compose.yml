@@ -1,6 +1,6 @@
 services:
   app:
-    image: ${DOCKERHUB_USERNAME}/queryai:latest
+    image: harshalso9/queryai:latest
     env_file: .env.production
     ports:
       - "127.0.0.1:3000:3000"
