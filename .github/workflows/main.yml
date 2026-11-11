@@ -14,7 +14,7 @@ env:
 
 jobs:
   build:
-    environment: QueryAI
+    environment: production
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
@@ -42,7 +42,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    environment: QueryAI
+    environment: production
     needs: build
     runs-on: ubuntu-24.04-arm
     steps:
